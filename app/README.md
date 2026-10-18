@@ -102,7 +102,9 @@ python main.py                          # http://localhost:8080, API docs at /do
 | `GEMMA_BASE_URL` | – | OpenAI-compatible endpoint, e.g. Ollama `http://localhost:11434/v1` (takes precedence) |
 | `GEMMA_MODEL` | `gemma-4-26b-a4b-it` / `gemma3:4b` | Model id (list what your key can use: `GET /v1beta/models`) |
 | `GEMMA_THINKING_LEVEL` | `MINIMAL` | Thinking level for AI Studio thinking models; empty to omit |
-| `GEMMA_TIMEOUT_S` | 20 | Per-call timeout |
+| `GEMMA_TIMEOUT_S` | 60 | Total time budget per Gemma task, across retries and fallback |
+| `GEMMA_RETRIES` | 4 | Attempts per model on 429/5xx/timeout (exponential backoff) |
+| `GEMMA_FALLBACK_MODELS` | `gemma-4-31b-it` | Comma-separated models tried after the primary fails |
 | `LOG_LEVEL` | INFO | Logging |
 
 ## API
@@ -127,5 +129,5 @@ python main.py                          # http://localhost:8080, API docs at /do
 - **Model scope:** lossless DC power flow over one interval. No voltage, reactive power, protection, stability, unit commitment or look-ahead.
 - **Assumed numbers:** costs and emission factors are assumptions (see `grid.py`).
 - **In-memory state:** the ledger and simulator state live in memory, so the app runs as a single instance.
-- **Gemma:** verified live once (18 Oct 2026, `gemma-4-26b-a4b-it` via Google AI Studio): priorities ≈ 6 s, briefing ≈ 4–6 s, one transient HTTP 500 recovered by the retry. The automated tests use mocked HTTP responses.
+- **Gemma:** verified live once (18 Oct 2026, `gemma-4-26b-a4b-it` via Google AI Studio): priorities ≈ 6 s, briefing ≈ 4–6 s, Google's Gemma 4 endpoint intermittently returned HTTP 500/503, so the client retries with backoff and then falls back to a second model. The automated tests use mocked HTTP responses.
 - **Docker image:** not built in this environment.

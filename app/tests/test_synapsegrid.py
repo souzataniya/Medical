@@ -198,6 +198,8 @@ def test_replay_and_tamper_detection():
 def gemma_with(monkeypatch, handler):
     monkeypatch.setenv("GEMMA_API_KEY", "test-key")
     monkeypatch.delenv("GEMMA_BASE_URL", raising=False)
+    monkeypatch.setenv("GEMMA_RETRIES", "2")
+    monkeypatch.setenv("GEMMA_FALLBACK_MODELS", "")
     return GemmaClient(transport=httpx.MockTransport(handler))
 
 
@@ -305,3 +307,20 @@ def test_gemma_thinking_parts_ignored_and_unsupported_setting_retried(monkeypatc
     assert out["outcome"]["status"] == "inference"
     assert "Reasoning" not in out["outcome"]["raw_text"]
     assert "thinkingConfig" not in calls[-1] and calls[0]["responseMimeType"] == "application/json"
+
+
+def test_gemma_falls_back_to_second_model_after_server_errors(monkeypatch):
+    answer = ('{"incident_summary": "Shelter open", "protected_loads": ["LD-SCHOOL"], '
+              '"load_priority": {}, "rationale": "Protect shelter."}')
+
+    def handler(request):
+        if "gemma-primary" in str(request.url):
+            return httpx.Response(500, json={"error": {"message": "Internal error encountered."}})
+        return ai_studio_reply(answer)
+
+    client = gemma_with(monkeypatch, handler)
+    client.model, client.fallback_models = "gemma-primary", ["gemma-backup"]
+    out = run(SynapseGrid(gemma=client).interpret_note("cyclone shelter open"))
+    assert out["outcome"]["status"] == "inference"
+    assert out["outcome"]["model"] == "gemma-backup"
+    assert sum("HTTP 500" in e for e in out["outcome"]["errors"]) == 2
