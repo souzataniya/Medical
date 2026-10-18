@@ -1,5 +1,7 @@
 # Demo video narration
 
+Watch: https://www.loom.com/share/5062c49df951400abe2b761341c9c24a
+
 `SynapseGrid-Demo.mp4` (2:59, 1920×1080) is a screen recording of the **live prototype** running locally,
 including a real Gemma 4 call (`gemma-4-26b-a4b-it`, Google AI Studio). The narration was generated with
 Gemini text-to-speech (`gemini-3.1-flash-tts-preview`, voice *Charon*), sped up 1.1×, and checked by transcription.
