@@ -1,0 +1,131 @@
+{
+  "config": {
+    "n_scenarios": 300,
+    "seed": 7,
+    "simulated": true,
+    "oracle": "OR-Tools GLOP LP feasibility with fixed proposal"
+  },
+  "scenarios": {
+    "feasible": 273,
+    "infeasible": 27
+  },
+  "planner_verifier_agreement": {
+    "agree": 273,
+    "disagree": 0
+  },
+  "recovery": {
+    "injected_unsafe_proposals": 300,
+    "certified": 273,
+    "failed_reported": 27,
+    "failed_although_feasible": 0,
+    "success_rate_when_feasible": 1.0,
+    "unsafe_accepted": 0,
+    "mean_attempts": 1.993,
+    "latency_ms": {
+      "p50": 1.1,
+      "p95": 1.23,
+      "max": 5.76
+    }
+  },
+  "rejection_accuracy": {
+    "proposals": 2400,
+    "TP": 2363,
+    "TN": 37,
+    "FP": 0,
+    "FN": 0,
+    "accuracy": 1.0,
+    "unsafe_accepted_FN": 0,
+    "by_kind": {
+      "battery_over_rating": {
+        "n": 300,
+        "unsafe": 300,
+        "rejected": 300,
+        "agree": 300
+      },
+      "generator_over_nameplate": {
+        "n": 300,
+        "unsafe": 300,
+        "rejected": 300,
+        "agree": 300
+      },
+      "network_shift": {
+        "n": 300,
+        "unsafe": 263,
+        "rejected": 263,
+        "agree": 300
+      },
+      "critical_load_shed": {
+        "n": 300,
+        "unsafe": 300,
+        "rejected": 300,
+        "agree": 300
+      },
+      "power_imbalance": {
+        "n": 300,
+        "unsafe": 300,
+        "rejected": 300,
+        "agree": 300
+      },
+      "random_perturbation": {
+        "n": 300,
+        "unsafe": 300,
+        "rejected": 300,
+        "agree": 300
+      },
+      "malformed_missing_id": {
+        "n": 50,
+        "unsafe": 50,
+        "rejected": 50,
+        "agree": 50
+      },
+      "not_an_object": {
+        "n": 300,
+        "unsafe": 300,
+        "rejected": 300,
+        "agree": 300
+      },
+      "malformed_string": {
+        "n": 62,
+        "unsafe": 62,
+        "rejected": 62,
+        "agree": 62
+      },
+      "malformed_bool": {
+        "n": 47,
+        "unsafe": 47,
+        "rejected": 47,
+        "agree": 47
+      },
+      "malformed_nan": {
+        "n": 43,
+        "unsafe": 43,
+        "rejected": 43,
+        "agree": 43
+      },
+      "malformed_negative_load": {
+        "n": 56,
+        "unsafe": 56,
+        "rejected": 56,
+        "agree": 56
+      },
+      "malformed_unknown_id": {
+        "n": 42,
+        "unsafe": 42,
+        "rejected": 42,
+        "agree": 42
+      }
+    },
+    "disagreements": []
+  },
+  "reproducibility": {
+    "rechecked": 22,
+    "identical_digests": 22
+  },
+  "latency_ms": {
+    "optimizer_p50": 0.179,
+    "optimizer_p95": 0.208,
+    "verifier_p50": 0.121,
+    "verifier_p95": 0.131
+  },
+  "runtime_s": 1.18
+}

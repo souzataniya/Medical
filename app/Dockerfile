@@ -15,7 +15,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN useradd --create-home --uid 10001 synapse
 WORKDIR /app
 COPY --from=builder /opt/venv /opt/venv
-COPY --chown=synapse:synapse main.py agents.py ./
+COPY --chown=synapse:synapse main.py agents.py grid.py optimizer.py verifier.py gemma.py evaluation.py ./
 COPY --chown=synapse:synapse static ./static
 USER synapse
 EXPOSE 8080
