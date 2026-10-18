@@ -8,7 +8,7 @@
   <img alt="Gemma" src="https://img.shields.io/badge/AI-Gemma-8E75B2?logo=google&logoColor=white">
   <img alt="OR-Tools" src="https://img.shields.io/badge/Optimizer-Google_OR--Tools-34A853">
   <img alt="Cloud Run" src="https://img.shields.io/badge/Deploy-Cloud_Run-4285F4?logo=googlecloud&logoColor=white">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-35_passing-success">
+  <a href="https://github.com/souzataniya/SynapseGrid/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/souzataniya/SynapseGrid/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Data" src="https://img.shields.io/badge/data-simulated-orange">
 </p>
 
@@ -214,7 +214,8 @@ In the stress test (night, no wind, nearly empty batteries, diesel trip), **no p
 | **Gemma** (Google AI Studio, or self-hosted via Ollama / vLLM) | [`app/gemma.py`](app/gemma.py) | Turns the operator's incident note into validated load priorities; optional plain-language briefing |
 | **Google OR-Tools** (GLOP linear solver) | [`app/optimizer.py`](app/optimizer.py) | DC optimal power flow: the dispatch plan; also the separate checker in the evaluation |
 | **Google Cloud Run** | [`app/Dockerfile`](app/Dockerfile) | Hosting the FastAPI app and dashboard |
-| **Secret Manager** | deploy command below | Storing the Gemma API key |
+| **Cloud Build + Artifact Registry** | [`cloudbuild.yaml`](cloudbuild.yaml) | Test, build, push and deploy pipeline |
+| **Secret Manager** | [`cloudbuild.yaml`](cloudbuild.yaml) | Storing the Gemma API key (never in env files or source) |
 
 <sub>Not used (and not claimed): Google Cloud Pub/Sub (the event stream is an in-process bus) and the NeuroSAN runtime (the agent pipeline is a custom asyncio DAG inspired by it).</sub>
 
@@ -268,27 +269,6 @@ Every Gemma call is labelled with its real outcome (`inference`, `rejected`, `un
 </details>
 
 <details>
-<summary><b>Deploy to Google Cloud Run</b></summary>
-
-```bash
-gcloud config set project <PROJECT_ID>
-gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com
-printf '%s' "<GEMMA_API_KEY>" | gcloud secrets create gemma-api-key --data-file=-
-PROJECT_NUMBER=$(gcloud projects describe <PROJECT_ID> --format='value(projectNumber)')
-gcloud secrets add-iam-policy-binding gemma-api-key \
-  --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" --role=roles/secretmanager.secretAccessor
-
-cd app
-gcloud run deploy synapsegrid --source . --region asia-southeast1 --allow-unauthenticated \
-  --port 8080 --cpu 1 --memory 1Gi --min-instances 1 --max-instances 1 --no-cpu-throttling --timeout 3600 \
-  --set-secrets GEMMA_API_KEY=gemma-api-key:latest
-```
-
-- **One instance:** the simulator state lives in memory, so all viewers must share a single instance.
-- **Billing:** `--min-instances 1` keeps the instance running (and billing) even when idle. Delete the service after judging.
-</details>
-
-<details>
 <summary><b>Project structure</b></summary>
 
 | File | Purpose |
@@ -307,24 +287,75 @@ The technical deep dive (optimization formulation, full constraint list, audit-r
 
 ---
 
-## 11. ⚠️ Known limitations
+## 11. ☁️ Google Cloud deployment
+
+```text
+ git push ──▶ GitHub Actions CI ── pytest (35 tests) · 300-scenario evaluation · docker build + /health smoke test
+ gcloud builds submit ──▶ Cloud Build (cloudbuild.yaml)
+                           ├─ test      python:3.12 · pytest
+                           ├─ build     docker build app/
+                           ├─ push      Artifact Registry  <region>-docker.pkg.dev/<project>/synapsegrid/synapsegrid
+                           └─ deploy    Cloud Run service "synapsegrid"
+                                          ├─ FastAPI + dashboard (port 8080, /health)
+                                          ├─ OR-Tools planner + independent verifier (in-process)
+                                          └─ GEMMA_API_KEY ◀── Secret Manager ──▶ Gemma via Google AI Studio (HTTPS)
+```
+
+**One-time setup**
+
+```bash
+gcloud config set project <PROJECT_ID>
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com
+gcloud artifacts repositories create synapsegrid --repository-format=docker --location=asia-southeast1
+
+# Gemma key (optional; without it the app runs and reports Gemma as "not configured")
+printf '%s' "<GEMMA_API_KEY>" | gcloud secrets create gemma-api-key --data-file=-
+
+# Let the build service account deploy and read the secret
+PROJECT_NUMBER=$(gcloud projects describe <PROJECT_ID> --format='value(projectNumber)')
+SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+for role in run.admin iam.serviceAccountUser artifactregistry.writer secretmanager.secretAccessor secretmanager.viewer logging.logWriter; do
+  gcloud projects add-iam-policy-binding <PROJECT_ID> --member="serviceAccount:${SA}" --role="roles/${role}"
+done
+```
+
+**Deploy**
+
+```bash
+gcloud builds submit --config cloudbuild.yaml
+gcloud run services describe synapsegrid --region asia-southeast1 --format='value(status.url)'
+```
+
+| Setting | Why |
+|---|---|
+| `--min-instances 1 --max-instances 1` | Simulator state and the audit ledger are in memory, so everyone must share one always-on instance (this bills while idle; delete the service after judging) |
+| `--no-cpu-throttling` | Keeps the simulated dispatch loop running between requests |
+| `--timeout 3600` | Long-lived SSE connection for the live dashboard |
+| `--set-secrets` (not `--set-env-vars`) | The Gemma key never appears in the build config, logs or source |
+
+> [!NOTE]
+> **Status:** the configuration is in the repo, and CI builds and smoke-tests the container on every push. The Cloud Run deployment itself has not been run yet. The live URL will be added at the top of this README once it is.
+
+---
+
+## 12. ⚠️ Known limitations
 
 - **Simulation only.** The data is synthetic and the network illustrative; there is no real-grid integration.
 - **Simplified physics.** Lossless DC power flow over a single 15-minute interval. No voltage, reactive power, protection or stability modelling, and no multi-hour look-ahead.
 - **Assumed numbers.** Emission factors and costs are assumptions, stated in [`app/grid.py`](app/grid.py).
 - **Gemma untested live.** Gemma has been tested only against mocked responses so far. A live run needs an API key or endpoint.
-- **Unbuilt container.** The Docker image and the Cloud Run deployment haven't been built or run yet. The pinned requirements were verified in a clean Python 3.12 environment.
+- **Not yet deployed.** The Cloud Run deployment hasn't been run. CI builds and smoke-tests the Docker image.
 - **Not a formal proof.** "Certified" means every modeled constraint holds under the stated assumptions.
 
 ---
 
-## 12. 📋 Submission checklist
+## 13. 📋 Submission checklist
 
 | Requirement | Status |
 |---|---|
 | Category specified | ✅ **Sustainability** |
 | Problem, community benefit, feasibility, scalability | ✅ Sections 1, 4, 6, 7 of this README |
 | Functional prototype using Google AI tools | ✅ Gemma + OR-Tools, runs locally (see section 10) |
-| Deployed on Cloud Run / GCP / Firebase | ⬜ Deploy command ready; URL to be added |
+| Deployed on Cloud Run / GCP / Firebase | ⬜ `cloudbuild.yaml` ready (section 11); URL to be added after deploying |
 | Public 3-minute demo video | ⬜ To be recorded; link to be added |
 | Proposal deck (PDF) | ✅ [SynapseGrid-Proposal.pdf](SynapseGrid-Proposal.pdf) (editable [PPTX](SynapseGrid-Proposal.pptx)) |

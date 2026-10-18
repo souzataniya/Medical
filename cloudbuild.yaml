@@ -1,0 +1,50 @@
+# Cloud Build: test → build image → push to Artifact Registry → deploy to Cloud Run.
+#
+# One-time setup (see README "Google Cloud deployment"):
+#   gcloud artifacts repositories create synapsegrid --repository-format=docker --location=asia-southeast1
+# Run:
+#   gcloud builds submit --config cloudbuild.yaml
+#
+# The Gemma key is read from Secret Manager (secret name _GEMMA_SECRET) if that secret exists;
+# otherwise the service is deployed without Gemma and reports "not configured".
+
+substitutions:
+  _REGION: asia-southeast1
+  _SERVICE: synapsegrid
+  _REPO: synapsegrid
+  _GEMMA_SECRET: gemma-api-key
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  - id: test
+    name: python:3.12-slim
+    dir: app
+    entrypoint: bash
+    args: ["-c", "pip install -q -r requirements-dev.txt && python -m pytest -q"]
+
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    dir: app
+    args: ["build", "-t", "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$BUILD_ID", "."]
+
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args: ["push", "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$BUILD_ID"]
+
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        SECRET_FLAG=""
+        if gcloud secrets describe "${_GEMMA_SECRET}" >/dev/null 2>&1; then
+          SECRET_FLAG="--set-secrets=GEMMA_API_KEY=${_GEMMA_SECRET}:latest"
+        fi
+        gcloud run deploy "${_SERVICE}" \
+          --image "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$BUILD_ID" \
+          --region "${_REGION}" --allow-unauthenticated --port 8080 \
+          --cpu 1 --memory 1Gi --min-instances 1 --max-instances 1 --no-cpu-throttling --timeout 3600 \
+          $$SECRET_FLAG
