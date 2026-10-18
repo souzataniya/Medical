@@ -1,0 +1,902 @@
+<!doctype html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SynapseGrid · JAPAC Mission Control</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2305070b'/%3E%3Cpath d='M9 22 L16 8 L23 22 Z' fill='none' stroke='%232dd4bf' stroke-width='2.4'/%3E%3Ccircle cx='16' cy='17' r='2.6' fill='%23a78bfa'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Geist', 'ui-sans-serif', 'system-ui'], mono: ['Geist Mono', 'ui-monospace', 'monospace'] },
+          colors: {
+            ink: { 950: '#04060a', 900: '#080b12', 850: '#0b0f18', 800: '#10151f', 700: '#1a2130' },
+            ok: '#2dd4bf', warn: '#fbbf24', crit: '#f43f5e', gemma: '#a78bfa', data: '#38bdf8',
+          },
+        },
+      },
+    };
+  </script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root { --ok:#2dd4bf; --warn:#fbbf24; --crit:#f43f5e; --gemma:#a78bfa; --data:#38bdf8; --line:rgba(148,163,184,.09); }
+    html { background:#04060a; }
+    body {
+      background:
+        radial-gradient(1200px 600px at 12% -10%, rgba(45,212,191,.07), transparent 60%),
+        radial-gradient(900px 500px at 95% 0%, rgba(167,139,250,.07), transparent 60%),
+        radial-gradient(800px 600px at 50% 120%, rgba(56,189,248,.05), transparent 60%),
+        #04060a;
+      font-feature-settings: "ss01", "cv11";
+    }
+    body::before {
+      content:""; position:fixed; inset:0; pointer-events:none; z-index:0; opacity:.35;
+      background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
+      background-size: 48px 48px; mask-image: radial-gradient(ellipse at center, #000 30%, transparent 80%);
+    }
+    .panel { position:relative; background:linear-gradient(180deg, rgba(16,21,31,.78), rgba(8,11,18,.82)); border:1px solid rgba(148,163,184,.10);
+      border-radius:14px; box-shadow: 0 0 0 1px rgba(0,0,0,.4), 0 20px 50px -20px rgba(0,0,0,.8), inset 0 1px 0 rgba(255,255,255,.03); backdrop-filter: blur(10px); }
+    .panel-h { display:flex; align-items:center; gap:.5rem; padding:.7rem .95rem; border-bottom:1px solid rgba(148,163,184,.08);
+      font: 500 10.5px/1 'Geist Mono', monospace; letter-spacing:.14em; text-transform:uppercase; color:#8b98ad; }
+    .panel-h svg { width:14px; height:14px; color:#64748b; }
+    .corner::after { content:""; position:absolute; top:-1px; left:18px; width:42px; height:1px; background:linear-gradient(90deg, transparent, var(--ok), transparent); opacity:.7; }
+    .mono { font-family:'Geist Mono', ui-monospace, monospace; }
+    .tabular { font-variant-numeric: tabular-nums; }
+    .scroll-thin::-webkit-scrollbar { width:6px; height:6px; } .scroll-thin::-webkit-scrollbar-thumb { background:#1f2937; border-radius:6px; }
+    .scroll-thin::-webkit-scrollbar-track { background:transparent; }
+    @keyframes flow { to { stroke-dashoffset:-56; } }
+    .flow { stroke-dasharray: 3 11; stroke-linecap:round; animation: flow linear infinite; }
+    @keyframes ring { 0% { r:26; opacity:.85; } 100% { r:48; opacity:0; } }
+    .ring { animation: ring 1.6s ease-out infinite; }
+    @keyframes blink { 50% { opacity:.25; } }
+    .blink { animation: blink 1.2s steps(2, start) infinite; }
+    @keyframes sweep { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+    .sweep { position:absolute; inset:0; overflow:hidden; pointer-events:none; border-radius:inherit; }
+    .sweep::after { content:""; position:absolute; inset:0; background:linear-gradient(90deg, transparent, rgba(45,212,191,.08), transparent); animation: sweep 2.8s ease-in-out infinite; }
+    @keyframes rise { from { opacity:0; transform: translateY(4px); } to { opacity:1; transform:none; } }
+    .rise { animation: rise .35s ease-out both; }
+    .agent { transition: border-color .25s, box-shadow .25s, background .25s; }
+    .agent.active { border-color: rgba(45,212,191,.55); box-shadow: 0 0 0 1px rgba(45,212,191,.25), 0 0 30px -6px rgba(45,212,191,.45); }
+    .agent.blocked { border-color: rgba(244,63,94,.6); box-shadow: 0 0 0 1px rgba(244,63,94,.25), 0 0 30px -6px rgba(244,63,94,.55); }
+    .switch { position:relative; width:42px; height:24px; border-radius:999px; background:#1a2130; border:1px solid rgba(148,163,184,.15); transition: all .2s; flex-shrink:0; }
+    .switch::after { content:""; position:absolute; top:3px; left:3px; width:16px; height:16px; border-radius:999px; background:#64748b; transition: all .2s; }
+    .switch[aria-checked="true"] { background: rgba(251,191,36,.18); border-color: rgba(251,191,36,.6); }
+    .switch[aria-checked="true"]::after { left:21px; background:#fbbf24; box-shadow: 0 0 12px #fbbf24; }
+    .switch.danger[aria-checked="true"] { background: rgba(244,63,94,.18); border-color: rgba(244,63,94,.7); }
+    .switch.danger[aria-checked="true"]::after { background:#f43f5e; box-shadow: 0 0 14px #f43f5e; }
+    .ctl { transition: border-color .2s, background .2s; }
+    .ctl.on { border-color: rgba(251,191,36,.35); background: rgba(251,191,36,.05); }
+    .ctl.on.danger { border-color: rgba(244,63,94,.45); background: rgba(244,63,94,.07); }
+    .tab { padding:.35rem .7rem; border-radius:8px; font:500 11px 'Geist Mono'; color:#7c8aa0; letter-spacing:.04em; }
+    .tab.on { background:#1a2130; color:#e2e8f0; box-shadow: inset 0 0 0 1px rgba(148,163,184,.15); }
+    .j-key { color:#7dd3fc; } .j-str { color:#a7f3d0; } .j-num { color:#fcd34d; } .j-bool { color:#c4b5fd; } .j-null { color:#64748b; }
+    .tip { position:absolute; pointer-events:none; z-index:30; min-width:220px; transition: opacity .12s; }
+    .node-label { font: 600 10px 'Geist Mono'; letter-spacing:.06em; fill:#cbd5e1; }
+    .node-sub { font: 500 9.5px 'Geist Mono'; fill:#7c8aa0; }
+    .region { font: 600 11px 'Geist'; letter-spacing:.42em; fill: rgba(148,163,184,.13); }
+    .hash { font-family:'Geist Mono'; word-break: break-all; }
+    .kpi-v { font: 600 26px/1 'Geist'; letter-spacing:-.02em; }
+    .attempt-chip { cursor:pointer; transition: transform .15s; } .attempt-chip:hover { transform: translateY(-1px); }
+    .smt { white-space: pre; }
+  </style>
+</head>
+<body class="min-h-full text-slate-200 font-sans antialiased">
+<div class="relative z-10 flex min-h-screen flex-col">
+
+  <!-- ═══════════ Header ═══════════ -->
+  <header class="sticky top-0 z-20 border-b border-white/5 bg-ink-950/80 backdrop-blur-xl">
+    <div class="flex h-14 items-center gap-4 px-4">
+      <div class="flex items-center gap-3">
+        <svg viewBox="0 0 32 32" class="h-8 w-8">
+          <defs><linearGradient id="lg" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#2dd4bf"/><stop offset="1" stop-color="#a78bfa"/></linearGradient></defs>
+          <rect x="1" y="1" width="30" height="30" rx="8" fill="#0b0f18" stroke="rgba(148,163,184,.18)"/>
+          <path d="M8 22 L16 8 L24 22 Z" fill="none" stroke="url(#lg)" stroke-width="2" stroke-linejoin="round"/>
+          <circle cx="16" cy="8" r="2" fill="#2dd4bf"/><circle cx="8" cy="22" r="2" fill="#38bdf8"/><circle cx="24" cy="22" r="2" fill="#a78bfa"/>
+          <circle cx="16" cy="17.3" r="2.4" fill="#e2e8f0"/>
+        </svg>
+        <div class="leading-tight">
+          <div class="text-[15px] font-semibold tracking-tight">SynapseGrid</div>
+          <div class="mono text-[10px] uppercase tracking-[.18em] text-slate-500">JAPAC Interconnect · Mission Control</div>
+        </div>
+      </div>
+
+      <div id="gridStatus" class="ml-4 flex items-center gap-2 rounded-full border border-ok/30 bg-ok/10 px-3 py-1 mono text-[11px] font-medium tracking-widest text-ok">
+        <span class="h-1.5 w-1.5 rounded-full bg-current shadow-[0_0_10px_currentColor]"></span><span id="gridStatusText">CONNECTING</span>
+      </div>
+
+      <div class="ml-auto flex items-center gap-2 text-[11px] mono">
+        <div id="gemmaBadge" class="flex items-center gap-2 rounded-lg border border-gemma/25 bg-gemma/10 px-2.5 py-1.5 text-gemma">
+          <i data-lucide="sparkles" class="h-3.5 w-3.5"></i><span id="gemmaText">Gemma</span><span id="gemmaDot" class="h-1.5 w-1.5 rounded-full bg-slate-500"></span>
+        </div>
+        <div class="hidden items-center gap-2 rounded-lg border border-white/10 bg-white/[.03] px-2.5 py-1.5 text-slate-400 md:flex">
+          <i data-lucide="radio-tower" class="h-3.5 w-3.5"></i><span>Pub/Sub</span><span id="pubsubText" class="text-slate-200 tabular">—</span>
+        </div>
+        <div class="hidden items-center gap-2 rounded-lg border border-white/10 bg-white/[.03] px-2.5 py-1.5 text-slate-400 lg:flex">
+          <i data-lucide="link-2" class="h-3.5 w-3.5"></i><span>Ledger</span><span id="ledgerHead" class="text-slate-200">—</span>
+        </div>
+        <div class="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[.03] px-2.5 py-1.5">
+          <span id="liveDot" class="h-1.5 w-1.5 rounded-full bg-crit blink"></span>
+          <span class="text-slate-400">T</span><span id="tickText" class="tabular text-slate-200">0000</span>
+          <span class="text-slate-600">|</span><span id="clock" class="tabular text-slate-300">--:--:--</span><span class="text-slate-500">UTC</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="grid flex-1 grid-cols-12 gap-3 p-3">
+
+    <!-- ═══════════ KPI strip ═══════════ -->
+    <section id="kpis" class="col-span-12 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6"></section>
+
+    <!-- ═══════════ Node map ═══════════ -->
+    <section class="panel corner col-span-12 xl:col-span-8 flex flex-col overflow-hidden">
+      <div class="panel-h">
+        <i data-lucide="map"></i> Interactive Energy Node Map
+        <span class="ml-2 normal-case tracking-normal text-slate-600">· 15 assets · 15 interconnectors · 4 control areas</span>
+        <div class="ml-auto flex items-center gap-3 normal-case tracking-normal text-[10.5px]">
+          <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-ok"></span>Stable</span>
+          <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-warn"></span>Warning</span>
+          <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-crit"></span>Overload / Critical</span>
+          <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full border border-crit"></span>Intercepted</span>
+        </div>
+      </div>
+      <div id="mapWrap" class="relative flex-1 min-h-[460px]">
+        <svg id="map" viewBox="0 0 1000 650" preserveAspectRatio="xMidYMid meet" class="absolute inset-0 h-full w-full"></svg>
+        <div id="tip" class="tip opacity-0 rounded-lg border border-white/10 bg-ink-900/95 p-3 text-xs shadow-2xl backdrop-blur"></div>
+        <div class="pointer-events-none absolute bottom-3 left-3 mono text-[10px] leading-relaxed text-slate-500">
+          <div>SCHEMATIC PROJECTION · LAT 48°N → 42°S · LON 95°E → 160°E</div>
+          <div>ARC = utilisation (sources) · SoC (BESS) · transformer K (hubs)</div>
+        </div>
+        <div id="mapBanner" class="hidden"></div>
+      </div>
+    </section>
+
+    <!-- ═══════════ Right column: controls + pipeline ═══════════ -->
+    <section class="col-span-12 xl:col-span-4 flex flex-col gap-3">
+      <div class="panel corner">
+        <div class="panel-h"><i data-lucide="sliders-horizontal"></i> Contingency Control Panel
+          <span id="schedState" class="ml-auto normal-case tracking-normal text-ok">● autopilot</span></div>
+        <div class="space-y-2 p-3">
+          <div class="ctl flex items-center gap-3 rounded-xl border border-white/[.07] bg-white/[.015] p-3" data-ctl="cloud_cover">
+            <div class="grid h-9 w-9 place-items-center rounded-lg bg-warn/10 text-warn"><i data-lucide="cloud-sun-rain" class="h-[18px] w-[18px]"></i></div>
+            <div class="min-w-0 flex-1"><div class="text-[13px] font-medium">Sudden Cloud Cover</div>
+              <div class="text-[11px] text-slate-500">Irradiance −80% across Kyushu, NT &amp; QLD solar</div></div>
+            <button class="switch" role="switch" aria-checked="false" data-fault="cloud_cover" aria-label="Toggle cloud cover"></button>
+          </div>
+          <div class="ctl flex items-center gap-3 rounded-xl border border-white/[.07] bg-white/[.015] p-3" data-ctl="grid_surge">
+            <div class="grid h-9 w-9 place-items-center rounded-lg bg-warn/10 text-warn"><i data-lucide="zap" class="h-[18px] w-[18px]"></i></div>
+            <div class="min-w-0 flex-1"><div class="text-[13px] font-medium">Heatwave Surge + HVDC Trip</div>
+              <div class="text-[11px] text-slate-500">Tokyo/Seoul demand +28%, +8 °C, L-CHG-SEL pole trip</div></div>
+            <button class="switch" role="switch" aria-checked="false" data-fault="grid_surge" aria-label="Toggle grid surge"></button>
+          </div>
+          <div class="ctl danger flex items-center gap-3 rounded-xl border border-white/[.07] bg-white/[.015] p-3" data-ctl="unsafe_overload">
+            <div class="grid h-9 w-9 place-items-center rounded-lg bg-crit/10 text-crit"><i data-lucide="skull" class="h-[18px] w-[18px]"></i></div>
+            <div class="min-w-0 flex-1"><div class="text-[13px] font-medium">Inject Unsafe Overload</div>
+              <div class="text-[11px] text-slate-500">Planner ignores limits &amp; over-commits ×1.38</div></div>
+            <button class="switch danger" role="switch" aria-checked="false" data-fault="unsafe_overload" aria-label="Toggle unsafe overload"></button>
+          </div>
+          <div class="grid grid-cols-3 gap-2 pt-1">
+            <button id="btnEval" class="col-span-2 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-ok/90 to-data/90 px-3 py-2.5 text-[13px] font-semibold text-ink-950 shadow-[0_0_30px_-8px_rgba(45,212,191,.8)] transition hover:brightness-110 active:scale-[.99]">
+              <i data-lucide="shield-check" class="h-4 w-4"></i> Run Verified Evaluation
+            </button>
+            <button id="btnClear" class="flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[.03] px-2 py-2.5 text-[12px] text-slate-300 hover:bg-white/[.06]">
+              <i data-lucide="sun" class="h-3.5 w-3.5"></i> All clear
+            </button>
+            <button id="btnPause" class="flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[.03] px-2 py-2 text-[12px] text-slate-300 hover:bg-white/[.06]">
+              <i data-lucide="pause" class="h-3.5 w-3.5"></i> <span>Pause</span>
+            </button>
+            <button id="btnStep" class="flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[.03] px-2 py-2 text-[12px] text-slate-300 hover:bg-white/[.06]">
+              <i data-lucide="step-forward" class="h-3.5 w-3.5"></i> Step
+            </button>
+            <button id="btnReset" class="flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[.03] px-2 py-2 text-[12px] text-slate-300 hover:bg-white/[.06]">
+              <i data-lucide="rotate-ccw" class="h-3.5 w-3.5"></i> Reset
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel corner flex-1">
+        <div class="panel-h"><i data-lucide="workflow"></i> Agent Network DAG
+          <span class="ml-auto normal-case tracking-normal text-slate-500" id="cycleLatency">—</span></div>
+        <div class="p-3">
+          <div id="dag" class="grid grid-cols-4 gap-2"></div>
+          <div id="loop" class="relative ml-[37.5%] h-7 w-[25%] rounded-b-xl border-x border-b border-dashed border-slate-700 transition-colors">
+            <div class="absolute -bottom-2.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md border border-white/10 bg-ink-900 px-2 py-0.5 mono text-[10px] text-slate-400" id="loopLabel">counter-example feedback loop · idle</div>
+          </div>
+          <div id="alerts" class="mt-5 space-y-1.5 mono text-[11px]"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ Proof inspector ═══════════ -->
+    <section class="panel corner col-span-12 xl:col-span-7 flex flex-col overflow-hidden">
+      <div class="panel-h"><i data-lucide="file-check"></i> Proof Inspector
+        <span class="normal-case tracking-normal text-slate-600">· Gemma Safety Verification Engine</span>
+        <button id="btnFreeze" class="ml-auto flex items-center gap-1.5 rounded-md border border-white/10 px-2 py-1 normal-case tracking-normal text-slate-400 hover:text-slate-200">
+          <i data-lucide="unlock" class="h-3 w-3"></i><span>Live</span></button>
+      </div>
+      <div class="border-b border-white/5 p-3">
+        <div class="flex flex-wrap items-center gap-3">
+          <div id="verdictBadge" class="flex items-center gap-2 rounded-lg px-3 py-1.5 mono text-[12px] font-semibold tracking-wider"></div>
+          <div class="mono text-[11px] text-slate-500"><span id="cycleId">—</span> · <span id="cycleOrigin">—</span></div>
+          <div id="attemptChips" class="ml-auto flex items-center gap-1.5"></div>
+        </div>
+        <div class="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
+          <div class="rounded-lg border border-white/[.06] bg-black/20 p-2.5">
+            <div class="flex items-center gap-1.5 mono text-[10px] uppercase tracking-widest text-slate-500"><i data-lucide="hash" class="h-3 w-3"></i><span id="artifactKind">SHA-256 proof hash</span>
+              <button class="ml-auto text-slate-500 hover:text-slate-200" data-copy="artifactHash" title="Copy"><i data-lucide="copy" class="h-3 w-3"></i></button></div>
+            <div id="artifactHash" class="hash mt-1 text-[11.5px] text-slate-200">—</div>
+          </div>
+          <div class="rounded-lg border border-white/[.06] bg-black/20 p-2.5">
+            <div class="flex items-center gap-1.5 mono text-[10px] uppercase tracking-widest text-slate-500"><i data-lucide="link" class="h-3 w-3"></i>prev hash · plan hash</div>
+            <div class="hash mt-1 text-[11.5px] text-slate-400"><span id="prevHash">—</span></div>
+            <div class="hash text-[11.5px] text-slate-500"><span id="planHash">—</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="flex items-center gap-1 border-b border-white/5 px-3 py-2" id="tabs">
+        <button class="tab on" data-tab="invariants">Invariants</button>
+        <button class="tab" data-tab="cex">Counter-example</button>
+        <button class="tab" data-tab="smt">SMT-LIB</button>
+        <button class="tab" data-tab="payload">Payload</button>
+        <div id="invSummary" class="ml-auto mono text-[11px] text-slate-500"></div>
+      </div>
+      <div id="tabBody" class="scroll-thin h-[300px] overflow-auto"></div>
+      <div id="gemmaBox" class="border-t border-gemma/15 bg-gemma/[.04] p-3"></div>
+    </section>
+
+    <!-- ═══════════ Telemetry chart ═══════════ -->
+    <section class="panel corner col-span-12 xl:col-span-5 flex flex-col">
+      <div class="panel-h"><i data-lucide="chart-area"></i> Dispatch Mix &amp; Carbon Intensity
+        <span class="ml-auto normal-case tracking-normal text-slate-500">last 90 certified intervals</span></div>
+      <div class="flex flex-wrap gap-x-4 gap-y-1 px-4 pt-3 mono text-[10.5px] text-slate-400" id="legend"></div>
+      <div class="relative flex-1 min-h-[260px] p-3"><canvas id="chart"></canvas></div>
+      <div class="grid grid-cols-3 gap-px border-t border-white/5 bg-white/5 text-center" id="hubStrip"></div>
+    </section>
+
+    <!-- ═══════════ Event terminal ═══════════ -->
+    <section class="panel corner col-span-12 xl:col-span-8 flex flex-col overflow-hidden">
+      <div class="panel-h"><i data-lucide="square-terminal"></i> Live Event Terminal &amp; Audit Log
+        <span class="normal-case tracking-normal text-slate-600">· pub/sub mirror</span>
+        <div class="ml-auto flex items-center gap-1 normal-case tracking-normal" id="topicFilters"></div>
+        <button id="btnTermPause" class="ml-2 rounded-md border border-white/10 px-2 py-1 normal-case tracking-normal text-slate-400 hover:text-slate-200">pause</button>
+      </div>
+      <div id="term" class="scroll-thin h-[300px] overflow-auto bg-black/30 p-2 mono text-[11.5px] leading-[1.55]"></div>
+    </section>
+
+    <!-- ═══════════ Ledger ═══════════ -->
+    <section class="panel corner col-span-12 xl:col-span-4 flex flex-col overflow-hidden">
+      <div class="panel-h"><i data-lucide="blocks"></i> Hash-Chained Audit Ledger
+        <span id="chainOk" class="ml-auto normal-case tracking-normal">—</span></div>
+      <div id="ledger" class="scroll-thin h-[300px] overflow-auto p-2"></div>
+    </section>
+  </main>
+
+  <footer class="flex items-center justify-between px-4 pb-4 mono text-[10px] text-slate-600">
+    <span>SynapseGrid v{{ version }} · deterministic physics verifier · Gemma audit layer · FastAPI on Google Cloud Run</span>
+    <span>Gemma reasons, math decides.</span>
+  </footer>
+</div>
+
+<div id="toasts" class="fixed right-4 top-16 z-50 flex w-[380px] flex-col gap-2"></div>
+
+<script>
+  window.SG_BOOT = { topology: {{ topology | tojson }}, tick: {{ tick_seconds }} };
+</script>
+{% raw %}
+<script>
+(() => {
+  'use strict';
+  const { topology: TOPO } = window.SG_BOOT;
+  const $ = (s) => document.querySelector(s);
+  const $$ = (s) => [...document.querySelectorAll(s)];
+  const NS = 'http://www.w3.org/2000/svg';
+  const COLORS = { stable: '#2dd4bf', warning: '#fbbf24', critical: '#f43f5e', tripped: '#f43f5e' };
+  const KIND = {
+    solar: { c: '#fcd34d', label: 'Solar farm' }, wind: { c: '#38bdf8', label: 'Wind farm' },
+    battery: { c: '#a78bfa', label: 'Battery (BESS)' }, peaker: { c: '#fb923c', label: 'Gas peaker' },
+    load: { c: '#e2e8f0', label: 'Urban load hub' },
+  };
+  const GLYPH = { // lucide path data (24×24)
+    solar: ['M12 8a4 4 0 1 0 0 8a4 4 0 1 0 0-8', 'M12 2v2', 'M12 20v2', 'm4.93 4.93 1.41 1.41', 'm17.66 17.66 1.41 1.41', 'M2 12h2', 'M20 12h2', 'm6.34 17.66-1.41 1.41', 'm19.07 4.93-1.41 1.41'],
+    wind: ['M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2', 'M9.6 4.6A2 2 0 1 1 11 8H2', 'M12.6 19.4A2 2 0 1 0 14 16H2'],
+    battery: ['M4 7h12a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z', 'M22 11v2', 'M11 9.5 8.5 12h3L9 14.5'],
+    peaker: ['M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z'],
+    load: ['M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z', 'M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2', 'M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2', 'M10 6h4', 'M10 10h4', 'M10 14h4', 'M10 18h4'],
+  };
+  const TOPIC = {
+    'grid.telemetry': 'text-slate-400 border-slate-600/40', 'agent.handoff': 'text-sky-300 border-sky-400/30',
+    'verifier.verdict': 'text-emerald-300 border-emerald-400/30', 'verifier.feedback': 'text-amber-300 border-amber-400/30',
+    'gemma.audit': 'text-violet-300 border-violet-400/30', 'carbon.report': 'text-teal-300 border-teal-400/30',
+    'control.fault': 'text-rose-300 border-rose-400/30', 'control.scheduler': 'text-slate-300 border-slate-500/30',
+    'control.reset': 'text-slate-300 border-slate-500/30',
+  };
+  const FAMILY = {
+    LINE_THERMAL: 'text-sky-300 bg-sky-400/10', GEN_ENVELOPE: 'text-amber-200 bg-amber-300/10', GEN_RAMP: 'text-orange-300 bg-orange-400/10',
+    BESS_POWER: 'text-violet-300 bg-violet-400/10', BESS_SOC_FLOOR: 'text-violet-300 bg-violet-400/10',
+    XFMR_HOTSPOT: 'text-rose-300 bg-rose-400/10', FREQ_BAND: 'text-teal-300 bg-teal-400/10',
+  };
+
+  const S = {
+    snap: null, shown: null, attempt: null, tab: 'invariants', frozen: false, holdUntil: 0,
+    termPaused: false, topicOff: new Set(), lastCycleId: null, chart: null, toastKey: '', toastAt: 0,
+  };
+
+  const fmt = (n, d = 0) => (n == null || Number.isNaN(n)) ? '—' : Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const short = (h, n = 10) => h ? `${h.slice(0, n)}…${h.slice(-6)}` : '—';
+  const icons = () => window.lucide && window.lucide.createIcons();
+  const el = (tag, attrs = {}, parent) => {
+    const e = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+    if (parent) parent.appendChild(e);
+    return e;
+  };
+  function jsonHTML(obj, indent = 2) {
+    const s = esc(JSON.stringify(obj, null, indent));
+    return s.replace(/(&quot;(?:\\.|[^&]|&(?!quot;))*?&quot;)(\s*:)?|\b(true|false)\b|\bnull\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g, (m, str, colon, bool) => {
+      if (str) return colon ? `<span class="j-key">${str}</span>${colon}` : `<span class="j-str">${str}</span>`;
+      if (bool) return `<span class="j-bool">${m}</span>`;
+      if (m === 'null') return `<span class="j-null">${m}</span>`;
+      return `<span class="j-num">${m}</span>`;
+    });
+  }
+
+  // ═════════════════════ Map ═════════════════════
+  const nodeById = Object.fromEntries(TOPO.nodes.map((n) => [n.id, n]));
+  const mapRefs = { nodes: {}, lines: {} };
+
+  function curve(a, b) {
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+    const k = Math.min(0.18, 40 / len) * len;
+    const cx = mx - (dy / len) * k, cy = my + (dx / len) * k;
+    return { d: `M${a.x},${a.y} Q${cx},${cy} ${b.x},${b.y}`, mid: { x: (a.x + 2 * cx + b.x) / 4, y: (a.y + 2 * cy + b.y) / 4 } };
+  }
+
+  function buildMap() {
+    const svg = $('#map');
+    svg.innerHTML = '';
+    const defs = el('defs', {}, svg);
+    defs.innerHTML = `
+      <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      <filter id="softglow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="8"/></filter>
+      <radialGradient id="zone" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="rgba(56,189,248,.10)"/><stop offset="1" stop-color="rgba(56,189,248,0)"/></radialGradient>
+      <pattern id="dots" width="14" height="14" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r=".8" fill="rgba(148,163,184,.12)"/></pattern>`;
+    el('rect', { x: 0, y: 0, width: 1000, height: 650, fill: 'url(#dots)' }, svg);
+    // graticule (schematic)
+    const g = el('g', { stroke: 'rgba(148,163,184,.06)', 'stroke-width': 1 }, svg);
+    for (let lon = 100; lon <= 160; lon += 10) { const x = (lon - 95) / 65 * 1000; el('line', { x1: x, y1: 0, x2: x, y2: 650 }, g); }
+    for (let lat = 40; lat >= -40; lat -= 10) { const y = (48 - lat) / 90 * 650; el('line', { x1: 0, y1: y, x2: 1000, y2: y }, g); }
+    const eq = (48 / 90) * 650;
+    el('line', { x1: 0, y1: eq, x2: 1000, y2: eq, stroke: 'rgba(56,189,248,.14)', 'stroke-dasharray': '2 6' }, svg);
+    el('text', { x: 8, y: eq - 6, class: 'node-sub', fill: 'rgba(56,189,248,.4)' }, svg).textContent = 'EQUATOR';
+    // control-area zones
+    [[640, 140, 190, 'JAPAN'], [460, 95, 90, 'KOREA'], [395, 300, 110, 'TAIWAN · LUZON'], [130, 340, 120, 'SINGAPORE · JOHOR'], [770, 500, 230, 'AUSTRALIA']]
+      .forEach(([x, y, r, name]) => {
+        el('circle', { cx: x, cy: y, r, fill: 'url(#zone)' }, svg);
+        el('text', { x, y: y - r * 0.55, 'text-anchor': 'middle', class: 'region' }, svg).textContent = name;
+      });
+
+    const lineLayer = el('g', {}, svg), nodeLayer = el('g', {}, svg);
+    TOPO.lines.forEach((ln) => {
+      const a = nodeById[ln.src], b = nodeById[ln.dst], c = curve(a, b);
+      const grp = el('g', { class: 'cursor-pointer' }, lineLayer);
+      const hit = el('path', { d: c.d, fill: 'none', stroke: 'transparent', 'stroke-width': 14 }, grp);
+      const base = el('path', { d: c.d, fill: 'none', stroke: 'rgba(148,163,184,.14)', 'stroke-width': 1.2 + ln.capacity_mw / 600 }, grp);
+      const glow = el('path', { d: c.d, fill: 'none', stroke: COLORS.stable, 'stroke-width': 4, opacity: 0, filter: 'url(#softglow)' }, grp);
+      const flow = el('path', { d: c.d, fill: 'none', stroke: COLORS.stable, 'stroke-width': 2.2, class: 'flow', opacity: 0 }, grp);
+      const x = el('g', { transform: `translate(${c.mid.x},${c.mid.y})`, opacity: 0 }, grp);
+      el('circle', { r: 8, fill: '#04060a', stroke: COLORS.critical, 'stroke-width': 1.5 }, x);
+      el('path', { d: 'M-3,-3 L3,3 M3,-3 L-3,3', stroke: COLORS.critical, 'stroke-width': 1.8, 'stroke-linecap': 'round' }, x);
+      [hit, base, flow].forEach((p) => {
+        p.addEventListener('mousemove', (e) => showTip(e, 'line', ln.id));
+        p.addEventListener('mouseleave', hideTip);
+      });
+      mapRefs.lines[ln.id] = { base, glow, flow, x };
+    });
+
+    TOPO.nodes.forEach((n) => {
+      const isLoad = n.kind === 'load';
+      const R = isLoad ? 25 : 19, circ = 2 * Math.PI * R;
+      const grp = el('g', { transform: `translate(${n.x},${n.y})`, class: 'cursor-pointer' }, nodeLayer);
+      const ring = el('circle', { r: 26, fill: 'none', stroke: COLORS.critical, 'stroke-width': 1.5, opacity: 0 }, grp);
+      el('circle', { r: R + 7, fill: 'rgba(4,6,10,.55)' }, grp);
+      el('circle', { r: R, fill: 'none', stroke: 'rgba(148,163,184,.13)', 'stroke-width': isLoad ? 5 : 4 }, grp);
+      const meter = el('circle', { r: R, fill: 'none', stroke: COLORS.stable, 'stroke-width': isLoad ? 5 : 4, 'stroke-linecap': 'round',
+        'stroke-dasharray': `0 ${circ}`, transform: 'rotate(-90)', filter: 'url(#glow)', style: 'transition: stroke-dasharray .6s ease, stroke .3s' }, grp);
+      const core = el('circle', { r: R - 6, fill: '#0b0f18', stroke: KIND[n.kind].c, 'stroke-opacity': .25 }, grp);
+      if (isLoad) el('circle', { r: R + 4, fill: 'none', stroke: 'rgba(226,232,240,.18)', 'stroke-dasharray': '2 3' }, grp);
+      const ig = el('g', { transform: `translate(${isLoad ? -9 : -7.5},${isLoad ? -9 : -7.5}) scale(${isLoad ? .75 : .625})`,
+        fill: 'none', stroke: KIND[n.kind].c, 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, grp);
+      GLYPH[n.kind].forEach((d) => el('path', { d }, ig));
+      const label = el('text', { y: R + 17, 'text-anchor': 'middle', class: 'node-label' }, grp);
+      label.textContent = n.id;
+      const sub = el('text', { y: R + 29, 'text-anchor': 'middle', class: 'node-sub tabular' }, grp);
+      grp.addEventListener('mousemove', (e) => showTip(e, 'node', n.id));
+      grp.addEventListener('mouseleave', hideTip);
+      mapRefs.nodes[n.id] = { meter, ring, sub, circ, core };
+    });
+  }
+
+  function renderMap(snap) {
+    const lines = Object.fromEntries(snap.lines.map((l) => [l.id, l]));
+    for (const [id, ref] of Object.entries(mapRefs.lines)) {
+      const l = lines[id]; if (!l) continue;
+      const color = COLORS[l.status] || COLORS.stable;
+      const active = l.flow_mw > 0.5;
+      ref.flow.setAttribute('stroke', color);
+      ref.flow.setAttribute('opacity', active ? 1 : 0);
+      ref.flow.setAttribute('stroke-width', (1.4 + 3 * Math.min(l.utilization, 1.2)).toFixed(2));
+      ref.flow.style.animationDuration = `${(2.6 - 1.9 * Math.min(l.utilization, 1)).toFixed(2)}s`;
+      ref.glow.setAttribute('stroke', color);
+      ref.glow.setAttribute('opacity', active ? (0.25 + 0.5 * Math.min(l.utilization, 1)).toFixed(2) : 0);
+      ref.base.setAttribute('stroke', l.status === 'tripped' ? 'rgba(244,63,94,.55)' : l.intercepted ? 'rgba(244,63,94,.35)' : 'rgba(148,163,184,.14)');
+      ref.base.setAttribute('stroke-dasharray', l.status === 'tripped' ? '5 5' : '');
+      ref.x.setAttribute('opacity', l.status === 'tripped' ? 1 : 0);
+    }
+    for (const n of snap.nodes) {
+      const ref = mapRefs.nodes[n.id]; if (!ref) continue;
+      const u = n.kind === 'battery' ? n.soc : Math.min(n.utilization, 1);
+      const color = COLORS[n.status] || COLORS.stable;
+      ref.meter.setAttribute('stroke-dasharray', `${(ref.circ * Math.max(u, 0.005)).toFixed(1)} ${ref.circ.toFixed(1)}`);
+      ref.meter.setAttribute('stroke', color);
+      ref.ring.setAttribute('opacity', n.intercepted ? 1 : 0);
+      ref.ring.setAttribute('class', n.intercepted ? 'ring' : '');
+      ref.sub.textContent = n.kind === 'load'
+        ? `${fmt(n.value_mw)} MW${n.shed_mw > 0 ? ` · DR −${fmt(n.shed_mw)}` : ''}`
+        : n.kind === 'battery' ? `${fmt(n.value_mw)} MW · ${fmt(n.soc * 100)}%` : `${fmt(n.value_mw)} / ${fmt(n.capacity_mw)}`;
+      ref.sub.setAttribute('fill', n.status === 'stable' ? '#7c8aa0' : color);
+    }
+    const lc = snap.last_cycle;
+    const banner = $('#mapBanner');
+    if (lc && lc.final.replans > 0) {
+      banner.className = 'pointer-events-none absolute left-3 top-3 rise';
+      banner.innerHTML = `<div class="flex items-center gap-2 rounded-lg border border-crit/40 bg-crit/10 px-3 py-2 mono text-[11px] text-rose-200 shadow-[0_0_30px_-10px_#f43f5e]">
+        <span class="h-1.5 w-1.5 rounded-full bg-crit blink"></span>VERIFIER INTERCEPTED ${lc.intercepted.length} ELEMENT${lc.intercepted.length === 1 ? '' : 'S'} · ${lc.final.replans} RE-PLAN${lc.final.replans === 1 ? '' : 'S'}</div>`;
+    } else banner.className = 'hidden';
+  }
+
+  function showTip(e, type, id) {
+    const snap = S.snap; if (!snap) return;
+    const tip = $('#tip'), wrap = $('#mapWrap').getBoundingClientRect();
+    let html = '';
+    const row = (k, v, c = 'text-slate-200') => `<div class="flex justify-between gap-6"><span class="text-slate-500">${k}</span><span class="mono tabular ${c}">${v}</span></div>`;
+    if (type === 'node') {
+      const n = snap.nodes.find((x) => x.id === id); if (!n) return;
+      const color = COLORS[n.status];
+      html = `<div class="mb-2 flex items-center gap-2"><span class="h-2 w-2 rounded-full" style="background:${color};box-shadow:0 0 8px ${color}"></span>
+        <span class="font-semibold">${esc(n.name)}</span><span class="ml-auto mono text-[10px] text-slate-500">${n.id} · ${n.country}</span></div>
+        <div class="mb-2 mono text-[10px] uppercase tracking-widest" style="color:${KIND[n.kind].c}">${KIND[n.kind].label} · ${n.status}${n.intercepted ? ' · intercepted' : ''}</div>`;
+      if (n.kind === 'load') {
+        html += row('Served', `${fmt(n.value_mw, 1)} MW`) + row('Demand', `${fmt(n.demand_mw, 1)} MW`) +
+          row('Demand response', `${fmt(n.shed_mw, 1)} MW`, n.shed_mw > 0 ? 'text-amber-300' : 'text-slate-400') +
+          row('Transformer K', `${fmt(n.utilization, 3)} p.u.`) + row('Hot-spot θ<sub>H</sub>', `${fmt(n.hotspot_c, 1)} °C`, n.hotspot_c > 110 ? 'text-rose-300' : 'text-slate-200') +
+          row('Frequency', `${fmt(n.freq_hz, 3)} Hz (nom ${n.nominal_hz})`);
+      } else {
+        html += row('Dispatch', `${fmt(n.value_mw, 1)} MW`) + row('Available', `${fmt(n.available_mw, 1)} MW`) + row('Nameplate', `${fmt(n.capacity_mw)} MW`) +
+          row('Carbon', `${fmt(n.carbon_g_kwh)} g/kWh`);
+        if (n.kind === 'battery') html += row('State of charge', `${fmt(n.soc * 100, 1)} %`) + row('Energy', `${fmt(n.energy_mwh)} MWh`);
+        if (n.irradiance_wm2 != null) html += row('Irradiance', `${fmt(n.irradiance_wm2)} W/m²`);
+        if (n.wind_speed_ms != null) html += row('Wind (hub)', `${fmt(n.wind_speed_ms, 1)} m/s`);
+      }
+    } else {
+      const l = snap.lines.find((x) => x.id === id); if (!l) return;
+      const color = COLORS[l.status];
+      html = `<div class="mb-2 flex items-center gap-2"><span class="h-2 w-2 rounded-full" style="background:${color}"></span><span class="font-semibold">${esc(l.name)}</span></div>
+        <div class="mb-2 mono text-[10px] uppercase tracking-widest text-slate-500">${l.id} · ${l.tech} · ${l.status}</div>` +
+        row('Flow', `${fmt(l.flow_mw, 1)} MW`) + row('Rating', `${fmt(l.capacity_mw)} MW × ${fmt(l.derate, 2)}`) +
+        row('Utilisation', `${fmt(l.utilization * 100, 1)} %`, l.utilization > .95 ? 'text-rose-300' : 'text-slate-200') + row('Route', `${l.src} → ${l.dst}`);
+    }
+    tip.innerHTML = html;
+    tip.style.opacity = 1;
+    const x = e.clientX - wrap.left + 16, y = e.clientY - wrap.top + 12;
+    tip.style.left = `${Math.min(x, wrap.width - 260)}px`;
+    tip.style.top = `${Math.min(y, wrap.height - tip.offsetHeight - 8)}px`;
+  }
+  function hideTip() { $('#tip').style.opacity = 0; }
+
+  // ═════════════════════ KPIs ═════════════════════
+  function spark(values, color) {
+    if (!values.length) return '';
+    const w = 110, h = 28, min = Math.min(...values), max = Math.max(...values), span = max - min || 1;
+    const pts = values.map((v, i) => `${(i / Math.max(values.length - 1, 1)) * w},${h - 2 - ((v - min) / span) * (h - 4)}`).join(' ');
+    return `<svg viewBox="0 0 ${w} ${h}" class="h-7 w-[110px]" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg>`;
+  }
+  function renderKpis(snap) {
+    const k = snap.kpis, m = snap.metrics, h = snap.history.slice(-40);
+    const tiles = [
+      { label: 'Demand served', icon: 'building-2', v: `${fmt(k.served_mw / 1000, 2)}`, unit: 'GW', sub: `of ${fmt(k.demand_mw / 1000, 2)} GW · DR ${fmt(k.shed_mw)} MW`, c: k.shed_mw > 0 ? '#fbbf24' : '#e2e8f0', s: h.map((x) => x.served) },
+      { label: 'Renewable share', icon: 'leaf', v: fmt(k.renewable_share * 100, 1), unit: '%', sub: `${fmt(k.renewable_available_mw)} MW available · ${fmt(k.curtailed_mw)} curtailed`, c: '#2dd4bf', s: h.map((x) => (x.wind + x.solar) / (x.served || 1)) },
+      { label: 'Carbon intensity', icon: 'factory', v: fmt(k.intensity_g_per_kwh, 0), unit: 'g/kWh', sub: `baseline 490 g/kWh (gas)`, c: k.intensity_g_per_kwh > 150 ? '#fbbf24' : '#34d399', s: h.map((x) => x.intensity) },
+      { label: 'CO₂ avoided', icon: 'trending-down', v: fmt(k.avoided_t_per_h, 0), unit: 't/h', sub: `${fmt(m.avoided_t_total, 0)} t cumulative`, c: '#38bdf8', s: h.map((x) => x.served * 0.49 - (x.intensity * x.served) / 1000) },
+      { label: 'Verifier interceptions', icon: 'shield-alert', v: fmt(m.blocked_attempts), unit: 'blocked', sub: `${fmt(m.replans)} re-plans · ${fmt(m.safe_holds)} safe-holds`, c: m.blocked_attempts ? '#f43f5e' : '#e2e8f0', s: [] },
+      { label: 'Certified dispatches', icon: 'badge-check', v: fmt(m.certified), unit: `/ ${fmt(m.cycles)}`, sub: `${fmt(m.invariants_evaluated)} invariants evaluated · first-pass ${m.first_pass_rate == null ? '—' : fmt(m.first_pass_rate * 100, 0) + '%'}`, c: '#a78bfa', s: [] },
+    ];
+    $('#kpis').innerHTML = tiles.map((t) => `
+      <div class="panel overflow-hidden p-3.5">
+        <div class="flex items-center gap-1.5 mono text-[10px] uppercase tracking-[.14em] text-slate-500"><i data-lucide="${t.icon}" class="h-3.5 w-3.5"></i>${t.label}</div>
+        <div class="mt-2 flex items-end justify-between gap-2">
+          <div class="tabular"><span class="kpi-v" style="color:${t.c}">${t.v}</span><span class="ml-1 text-[12px] text-slate-500">${t.unit}</span></div>
+          ${spark(t.s, t.c)}
+        </div>
+        <div class="mt-1.5 truncate text-[11px] text-slate-500">${t.sub}</div>
+      </div>`).join('');
+  }
+
+  // ═════════════════════ Header / controls ═════════════════════
+  function renderHeader(snap) {
+    const statusMap = {
+      NOMINAL: ['text-ok border-ok/30 bg-ok/10', 'GRID NOMINAL'], CONTINGENCY: ['text-warn border-warn/30 bg-warn/10', 'CONTINGENCY ACTIVE'],
+      INTERCEPTING: ['text-crit border-crit/40 bg-crit/10', 'VERIFIER INTERCEPTING'], SAFE_HOLD: ['text-crit border-crit/40 bg-crit/10', 'SAFE-HOLD'],
+    };
+    const [cls, text] = statusMap[snap.grid_status] || statusMap.NOMINAL;
+    $('#gridStatus').className = `ml-4 flex items-center gap-2 rounded-full border px-3 py-1 mono text-[11px] font-medium tracking-widest ${cls}`;
+    $('#gridStatusText').textContent = text;
+    $('#tickText').textContent = String(snap.tick).padStart(4, '0');
+    const g = snap.gemma;
+    $('#gemmaText').textContent = g.provider === 'offline' ? 'Gemma · offline audit' : `${g.model}`;
+    $('#gemmaDot').className = `h-1.5 w-1.5 rounded-full ${g.online ? 'bg-ok shadow-[0_0_8px_#2dd4bf]' : g.provider === 'offline' ? 'bg-slate-500' : 'bg-warn'}`;
+    $('#gemmaBadge').title = g.last_error || `${g.provider} · ${g.calls} calls${g.last_latency_ms ? ` · ${g.last_latency_ms} ms` : ''}`;
+    $('#pubsubText').textContent = `${fmt(snap.pubsub.published)} msgs · ${snap.pubsub.subscribers} sub`;
+    $('#ledgerHead').textContent = `#${snap.ledger.length} ${snap.ledger.head.slice(0, 8)}`;
+    for (const sw of $$('.switch[data-fault]')) {
+      const on = !!snap.faults[sw.dataset.fault];
+      sw.setAttribute('aria-checked', on);
+      sw.closest('.ctl').classList.toggle('on', on);
+    }
+    $('#schedState').textContent = snap.scheduler_running ? '● autopilot' : '❚❚ paused';
+    $('#schedState').className = `ml-auto normal-case tracking-normal ${snap.scheduler_running ? 'text-ok' : 'text-warn'}`;
+    $('#btnPause').querySelector('span').textContent = snap.scheduler_running ? 'Pause' : 'Resume';
+  }
+
+  // ═════════════════════ Agent DAG ═════════════════════
+  function renderDag(snap) {
+    const lc = snap.last_cycle; if (!lc) return;
+    const f = lc.forecast, last = lc.attempts[lc.attempts.length - 1], t = lc.timings_ms;
+    const verdicts = lc.attempts.map((a) => a.verification.verdict);
+    const blocked = verdicts.includes('BLOCKED');
+    const cards = [
+      { key: 'forecasting', icon: 'cloud-sun', title: 'Forecast', sub: 'Agent 1', lines: [`RE ${fmt(f.renewable_available_mw)} MW`, `P10–P90 ${fmt(f.renewable_p10_mw / 1000, 1)}–${fmt(f.renewable_p90_mw / 1000, 1)} GW`], ms: t.forecasting },
+      { key: 'load_matching', icon: 'git-fork', title: 'Load-Match', sub: 'Agent 2', lines: [`${last.plan.flows.length} flows · ${lc.attempts.length} proposal${lc.attempts.length > 1 ? 's' : ''}`, esc(last.plan.strategy.split(' + ')[0])], ms: t.load_matching },
+      { key: 'gemma_verifier', icon: 'shield-check', title: 'Verifier', sub: 'Gemma safety', lines: [`${last.verification.checks.length} invariants`, verdicts.map((v, i) => `A${i + 1}${v === 'APPROVED' ? '✓' : '✗'}`).join(' ')], ms: t.gemma_verifier, gemma: true },
+      { key: 'carbon_optimization', icon: 'leaf', title: 'Carbon', sub: 'Agent 3', lines: lc.carbon ? [`${fmt(lc.carbon.intensity_g_per_kwh)} g/kWh`, `−${fmt(lc.carbon.avoided_t_per_h)} tCO₂/h`] : ['awaiting cert', '—'], ms: t.carbon_optimization },
+    ];
+    $('#dag').innerHTML = cards.map((c, i) => `
+      <div class="agent relative rounded-xl border ${c.gemma ? 'border-gemma/25 bg-gemma/[.05]' : 'border-white/[.08] bg-white/[.02]'} p-2.5" data-agent="${c.key}">
+        ${i < 3 ? '<div class="absolute -right-2 top-1/2 z-10 -translate-y-1/2 text-slate-600"><svg width="8" height="10" viewBox="0 0 8 10"><path d="M0 0 L8 5 L0 10Z" fill="currentColor"/></svg></div>' : ''}
+        <div class="flex items-center gap-1.5"><i data-lucide="${c.icon}" class="h-3.5 w-3.5 ${c.gemma ? 'text-gemma' : 'text-sky-300'}"></i>
+          <span class="truncate text-[12px] font-semibold">${c.title}</span></div>
+        <div class="mono text-[9.5px] uppercase tracking-widest text-slate-500">${c.sub}</div>
+        <div class="mt-2 space-y-0.5 mono text-[10.5px] text-slate-300">${c.lines.map((l) => `<div class="truncate">${l}</div>`).join('')}</div>
+        <div class="mt-1.5 mono text-[10px] text-slate-500 tabular">${c.ms != null ? fmt(c.ms, 2) + ' ms' : '—'}</div>
+      </div>`).join('');
+    $('#cycleLatency').textContent = `${lc.cycle_id} · ${fmt(t.total, 1)} ms end-to-end`;
+    const loop = $('#loop');
+    loop.style.borderColor = blocked ? 'rgba(244,63,94,.7)' : '';
+    $('#loopLabel').innerHTML = blocked
+      ? `<span class="text-rose-300">↺ ${lc.final.replans} counter-example${lc.final.replans > 1 ? 's' : ''} → re-plan</span>`
+      : 'counter-example feedback loop · idle';
+    // sequential activation sweep
+    const order = ['forecasting', 'load_matching', 'gemma_verifier', 'carbon_optimization'];
+    order.forEach((k, i) => setTimeout(() => {
+      $$('.agent').forEach((a) => a.classList.remove('active'));
+      const node = document.querySelector(`.agent[data-agent="${k}"]`);
+      if (!node) return;
+      if (k === 'gemma_verifier' && blocked) { node.classList.add('blocked'); setTimeout(() => node.classList.remove('blocked'), 900); }
+      else node.classList.add('active');
+      if (i === order.length - 1) setTimeout(() => node.classList.remove('active'), 500);
+    }, i * 260));
+    const alerts = f.alerts.slice(0, 4);
+    $('#alerts').innerHTML = alerts.length
+      ? alerts.map((a) => `<div class="flex items-start gap-2 rounded-md border border-warn/20 bg-warn/[.05] px-2 py-1 text-amber-200/90"><span class="mt-[5px] h-1 w-1 shrink-0 rounded-full bg-warn"></span>${esc(a)}</div>`).join('')
+      : '<div class="flex items-center gap-2 rounded-md border border-white/5 bg-white/[.02] px-2 py-1 text-slate-500"><span class="h-1 w-1 rounded-full bg-ok"></span>No forecast alerts · all assets within envelope</div>';
+  }
+
+  // ═════════════════════ Proof inspector ═════════════════════
+  function chooseCycle(snap) {
+    const lc = snap.last_cycle; if (!lc) return;
+    if (S.frozen && S.shown) return;
+    const hasBlock = lc.final.replans > 0;
+    if (hasBlock || Date.now() > S.holdUntil || !S.shown) {
+      if (!S.shown || S.shown.cycle_id !== lc.cycle_id) {
+        S.shown = lc;
+        S.attempt = hasBlock ? 0 : lc.attempts.length - 1;
+        if (hasBlock) S.holdUntil = Date.now() + 6000;
+      } else S.shown = lc; // same cycle, refreshed (e.g. Gemma audit landed)
+    }
+  }
+
+  function renderInspector() {
+    const lc = S.shown; if (!lc) return;
+    const a = lc.attempts[S.attempt] || lc.attempts[lc.attempts.length - 1];
+    const v = a.verification, art = v.certificate || v.counterexample;
+    const approved = v.verdict === 'APPROVED';
+    const vb = $('#verdictBadge');
+    vb.className = `flex items-center gap-2 rounded-lg px-3 py-1.5 mono text-[12px] font-semibold tracking-wider ${approved ? 'bg-ok/10 text-ok ring-1 ring-ok/30' : 'bg-crit/10 text-crit ring-1 ring-crit/40'}`;
+    vb.innerHTML = `<i data-lucide="${approved ? 'shield-check' : 'shield-x'}" class="h-4 w-4"></i>${approved ? 'PROOF CERTIFIED' : 'BLOCKED · COUNTER-EXAMPLE'} <span class="font-normal opacity-60">A${a.attempt}</span>`;
+    $('#cycleId').textContent = lc.cycle_id;
+    $('#cycleOrigin').textContent = `${lc.origin} · tick ${lc.tick}${lc.unsafe_planner ? ' · unsafe planner' : ''}`;
+    $('#attemptChips').innerHTML = lc.attempts.map((x, i) => {
+      const ok = x.verification.verdict === 'APPROVED', sel = i === S.attempt;
+      return `<button class="attempt-chip flex items-center gap-1 rounded-md px-2 py-1 mono text-[10.5px] ${ok ? 'text-ok' : 'text-crit'} ${sel ? (ok ? 'bg-ok/15 ring-1 ring-ok/40' : 'bg-crit/15 ring-1 ring-crit/40') : 'bg-white/[.03] ring-1 ring-white/10'}" data-attempt="${i}">
+        A${i + 1} ${ok ? '✓' : '✗'}</button>${i < lc.attempts.length - 1 ? '<span class="text-slate-600 text-[10px]">→</span>' : ''}`;
+    }).join('');
+    $('#artifactKind').textContent = approved ? 'SHA-256 proof certificate' : 'SHA-256 counter-example trace';
+    $('#artifactHash').textContent = art.hash;
+    $('#artifactHash').className = `hash mt-1 text-[11.5px] ${approved ? 'text-teal-200' : 'text-rose-200'}`;
+    $('#prevHash').textContent = `prev  ${art.prev_hash}`;
+    $('#planHash').textContent = `plan  ${art.plan_hash}`;
+    const nviol = v.checks.filter((c) => !c.satisfied).length;
+    $('#invSummary').innerHTML = `<span class="${nviol ? 'text-rose-300' : 'text-ok'}">${v.checks.length - nviol}/${v.checks.length} hold</span> · ${fmt(v.latency_ms, 2)} ms`;
+    $$('#tabs .tab').forEach((t) => t.classList.toggle('on', t.dataset.tab === S.tab));
+
+    const body = $('#tabBody');
+    if (S.tab === 'invariants') {
+      const rows = [...v.checks].sort((x, y) => (x.satisfied - y.satisfied) || (x.slack / (Math.abs(x.rhs) || 1)) - (y.slack / (Math.abs(y.rhs) || 1)));
+      body.innerHTML = `<table class="w-full text-left text-[11.5px]"><thead class="sticky top-0 bg-ink-900/95 backdrop-blur mono text-[10px] uppercase tracking-widest text-slate-500">
+        <tr><th class="w-8 px-3 py-2"></th><th class="px-2 py-2">Invariant</th><th class="px-2 py-2">Evaluation</th><th class="w-36 px-3 py-2 text-right">Slack</th></tr></thead><tbody>` +
+        rows.map((c) => {
+          const ratio = Math.max(-1, Math.min(1, c.slack / (Math.abs(c.rhs) || 1)));
+          const barW = Math.abs(ratio) * 100;
+          return `<tr class="border-t border-white/[.04] ${c.satisfied ? '' : 'bg-crit/[.06]'}">
+            <td class="px-3 py-1.5">${c.satisfied ? '<span class="text-ok">✓</span>' : '<span class="text-crit">✗</span>'}</td>
+            <td class="px-2 py-1.5"><span class="rounded px-1.5 py-0.5 mono text-[10px] ${FAMILY[c.family] || ''}">${c.family}</span>
+              <span class="ml-1 mono text-[11px] text-slate-300">${c.subject}</span>
+              <div class="mt-0.5 mono text-[10px] text-slate-500">${esc(c.expression)}</div></td>
+            <td class="px-2 py-1.5 mono text-[11px] ${c.satisfied ? 'text-slate-300' : 'text-rose-200'}">${esc(c.evaluated)}</td>
+            <td class="px-3 py-1.5 text-right"><div class="mono text-[11px] tabular ${c.satisfied ? 'text-slate-400' : 'text-crit'}">${c.slack >= 0 ? '+' : ''}${fmt(c.slack, c.unit === 'p.u.' || c.unit === 'Hz' ? 3 : 1)} ${c.unit}</div>
+              <div class="ml-auto mt-1 h-1 w-24 overflow-hidden rounded bg-white/5"><div class="h-full ${c.satisfied ? (ratio < .1 ? 'bg-warn' : 'bg-ok/70') : 'bg-crit'}" style="width:${Math.max(barW, 3)}%"></div></div></td></tr>`;
+        }).join('') + '</tbody></table>';
+    } else if (S.tab === 'cex') {
+      const cex = lc.attempts.map((x) => x.verification.counterexample).filter(Boolean);
+      body.innerHTML = cex.length
+        ? cex.map((c) => `<div class="border-b border-white/5 p-3"><div class="mb-2 flex items-center gap-2 mono text-[11px]"><span class="rounded bg-crit/15 px-1.5 py-0.5 text-crit">A${c.attempt}</span>
+            <span class="text-slate-400">${c.trace_id}</span><span class="ml-auto text-slate-500">${c.violations.length} violation(s)</span></div>
+            <pre class="scroll-thin overflow-auto rounded-lg bg-black/40 p-3 mono text-[11px] leading-relaxed">${jsonHTML({ trace_id: c.trace_id, hash: c.hash, prev_hash: c.prev_hash, plan_hash: c.plan_hash, telemetry_hash: c.telemetry_hash, witness: c.witness, violations: c.violations.map((x) => ({ id: x.id, evaluated: x.evaluated, excess: +(x.lhs - x.rhs).toFixed(4), unit: x.unit })), feedback: (lc.attempts[c.attempt - 1] || {}).feedback })}</pre></div>`).join('')
+        : `<div class="grid h-full place-items-center p-8 text-center text-slate-500"><div><i data-lucide="shield-check" class="mx-auto mb-2 h-8 w-8 text-ok/60"></i>No counter-examples this cycle.<div class="mt-1 text-[11px]">Toggle a contingency or inject an unsafe overload to watch the verifier intercept.</div></div></div>`;
+    } else if (S.tab === 'smt') {
+      body.innerHTML = `<pre class="smt p-3 mono text-[11px] leading-relaxed text-slate-300">${esc(v.smtlib).replace(/(;[^\n]*)/g, '<span class="text-slate-500">$1</span>').replace(/\b(assert|declare-const|define-fun|check-sat|set-logic)\b/g, '<span class="text-violet-300">$1</span>')}</pre>`;
+    } else {
+      body.innerHTML = `<div class="grid grid-cols-1 gap-0 md:grid-cols-2">
+        <div class="border-r border-white/5 p-3"><div class="mb-2 flex items-center gap-2 mono text-[10px] uppercase tracking-widest ${approved ? 'text-ok' : 'text-crit'}">${approved ? '● approved transaction' : '● blocked transaction'}</div>
+          <pre class="scroll-thin overflow-auto rounded-lg bg-black/40 p-3 mono text-[11px] leading-relaxed">${jsonHTML(a.plan)}</pre></div>
+        <div class="p-3"><div class="mb-2 mono text-[10px] uppercase tracking-widest text-slate-400">● ${approved ? 'proof certificate' : 'counter-example envelope'}</div>
+          <pre class="scroll-thin overflow-auto rounded-lg bg-black/40 p-3 mono text-[11px] leading-relaxed">${jsonHTML(approved ? art : { ...art, violations: `[${art.violations.length} — see Counter-example tab]` })}</pre></div></div>`;
+    }
+
+    const gm = v.gemma;
+    $('#gemmaBox').innerHTML = `<div class="flex items-start gap-3">
+      <div class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-gemma/15 text-gemma"><i data-lucide="sparkles" class="h-4 w-4"></i></div>
+      <div class="min-w-0 flex-1"><div class="flex items-center gap-2 mono text-[10px] uppercase tracking-widest text-gemma/80">Gemma safety audit
+        ${gm ? `<span class="rounded bg-gemma/10 px-1.5 py-0.5 normal-case tracking-normal text-gemma/70">${esc(gm.model)} · ${esc(gm.source)}${gm.latency_ms ? ` · ${fmt(gm.latency_ms)} ms` : ''}</span>` : ''}</div>
+        <div class="mt-1 whitespace-pre-line text-[12.5px] leading-relaxed text-slate-200">${gm ? esc(gm.text) : (approved && lc.origin === 'scheduler'
+          ? '<span class="text-slate-500">Autonomous certified cycle — Gemma audits are reserved for counter-examples and on-demand evaluations. Click <b class="text-slate-300">Run Verified Evaluation</b> for an attestation.</span>'
+          : '<span class="text-slate-500 blink">awaiting Gemma audit…</span>')}</div></div></div>`;
+    icons();
+  }
+
+  // ═════════════════════ Chart ═════════════════════
+  const SERIES = [
+    { key: 'wind', label: 'Wind', c: '#38bdf8' }, { key: 'solar', label: 'Solar', c: '#fcd34d' }, { key: 'battery', label: 'BESS', c: '#a78bfa' },
+    { key: 'peaker', label: 'Gas peaker', c: '#fb923c' }, { key: 'shed', label: 'Demand response', c: '#f43f5e' },
+  ];
+  function buildChart() {
+    $('#legend').innerHTML = SERIES.map((s) => `<span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-sm" style="background:${s.c}"></span>${s.label}</span>`).join('') +
+      '<span class="flex items-center gap-1.5"><span class="w-3 border-t border-dashed border-slate-300"></span>Demand</span><span class="flex items-center gap-1.5"><span class="w-3 border-t-2 border-emerald-400"></span>gCO₂/kWh (right)</span>';
+    if (!window.Chart) { $('#chart').parentElement.innerHTML = '<div class="grid h-full place-items-center text-slate-500 text-sm">Chart.js unavailable (offline)</div>'; return; }
+    Chart.defaults.color = '#64748b'; Chart.defaults.font.family = 'Geist Mono'; Chart.defaults.font.size = 10;
+    S.chart = new Chart($('#chart'), {
+      type: 'line',
+      data: { labels: [], datasets: [
+        ...SERIES.map((s, i) => ({ label: s.label, data: [], stack: 'mix', fill: i === 0 ? 'origin' : '-1', borderColor: s.c, backgroundColor: s.c + (s.key === 'shed' ? '55' : '2e'), borderWidth: 1.4 })),
+        { label: 'Demand', data: [], stack: 'demand', fill: false, borderColor: '#cbd5e1', borderDash: [4, 4], borderWidth: 1.2 },
+        { label: 'gCO₂/kWh', data: [], stack: 'carbon', fill: false, yAxisID: 'y2', borderColor: '#34d399', borderWidth: 2 },
+      ] },
+      options: {
+        animation: false, responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        elements: { point: { radius: 0, hoverRadius: 3 }, line: { tension: .35 } },
+        plugins: { legend: { display: false }, tooltip: { backgroundColor: 'rgba(8,11,18,.95)', borderColor: 'rgba(148,163,184,.2)', borderWidth: 1, padding: 10,
+          callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${fmt(ctx.parsed.y)}${ctx.dataset.yAxisID === 'y2' ? ' g/kWh' : ' MW'}` } } },
+        scales: {
+          x: { grid: { display: false }, ticks: { maxTicksLimit: 6 } },
+          y: { stacked: true, min: 0, grid: { color: 'rgba(148,163,184,.06)' }, ticks: { callback: (v) => `${(v / 1000).toFixed(1)} GW` } },
+          y2: { position: 'right', min: 0, suggestedMax: 300, grid: { display: false }, ticks: { color: '#34d399' } },
+        },
+      },
+    });
+  }
+  function renderChart(snap) {
+    const h = snap.history;
+    if (S.chart) {
+      S.chart.data.labels = h.map((x) => `T${x.tick}`);
+      SERIES.forEach((s, i) => { S.chart.data.datasets[i].data = h.map((x) => x[s.key]); });
+      S.chart.data.datasets[5].data = h.map((x) => x.demand);
+      S.chart.data.datasets[6].data = h.map((x) => x.intensity);
+      S.chart.update('none');
+    }
+    const c = snap.last_cycle && snap.last_cycle.carbon;
+    if (c) {
+      const hubs = Object.entries(c.hub_intensity_g_per_kwh);
+      $('#hubStrip').className = `grid grid-cols-${hubs.length} gap-px border-t border-white/5 bg-white/5 text-center`;
+      $('#hubStrip').innerHTML = hubs.map(([id, g]) => `<div class="bg-ink-900/90 px-2 py-2"><div class="mono text-[10px] tracking-widest text-slate-500">${id}</div>
+        <div class="tabular text-[15px] font-semibold" style="color:${g > 200 ? '#fb923c' : g > 100 ? '#fbbf24' : '#2dd4bf'}">${fmt(g)}<span class="ml-0.5 text-[10px] font-normal text-slate-500">g/kWh</span></div></div>`).join('');
+    }
+  }
+
+  // ═════════════════════ Terminal ═════════════════════
+  function buildFilters() {
+    const topics = ['grid.telemetry', 'agent.handoff', 'verifier.verdict', 'verifier.feedback', 'gemma.audit', 'carbon.report'];
+    $('#topicFilters').innerHTML = topics.map((t) => `<button data-topic="${t}" class="rounded px-1.5 py-0.5 mono text-[10px] ${TOPIC[t].split(' ')[0]} ring-1 ring-white/10">${t.split('.')[1]}</button>`).join('');
+    $$('#topicFilters button').forEach((b) => b.addEventListener('click', () => {
+      const t = b.dataset.topic;
+      S.topicOff.has(t) ? S.topicOff.delete(t) : S.topicOff.add(t);
+      b.style.opacity = S.topicOff.has(t) ? .35 : 1;
+      $$(`#term [data-topic="${t}"]`).forEach((r) => r.classList.toggle('hidden', S.topicOff.has(t)));
+    }));
+  }
+  function appendTerm(msg, replay) {
+    if (S.termPaused && !replay) return;
+    const term = $('#term');
+    const atBottom = term.scrollHeight - term.scrollTop - term.clientHeight < 40;
+    const cls = TOPIC[msg.topic] || 'text-slate-300 border-slate-600/40';
+    let tone = '';
+    if (msg.topic === 'verifier.verdict') tone = msg.attributes.verdict === 'BLOCKED' ? 'bg-crit/[.07]' : 'bg-ok/[.04]';
+    const row = document.createElement('div');
+    row.dataset.topic = msg.topic;
+    row.className = `group cursor-pointer rounded px-1.5 py-0.5 hover:bg-white/[.03] ${tone} ${S.topicOff.has(msg.topic) ? 'hidden' : ''}`;
+    const time = msg.publishTime.slice(11, 23);
+    const verdictTint = msg.topic === 'verifier.verdict' ? (msg.attributes.verdict === 'BLOCKED' ? 'text-rose-300' : 'text-emerald-300') : 'text-slate-300';
+    row.innerHTML = `<div class="flex gap-2"><span class="shrink-0 text-slate-600">${time}</span>
+      <span class="shrink-0 rounded border px-1 text-[10px] leading-[16px] ${cls}">${msg.topic}</span>
+      <span class="${verdictTint} truncate">${esc(msg.attributes.summary || '')}</span><span class="ml-auto shrink-0 text-slate-700 group-hover:text-slate-500">${msg.messageId.slice(0, 8)}</span></div>
+      <pre class="hidden mt-1 max-h-72 overflow-auto rounded bg-black/50 p-2 text-[10.5px] leading-snug scroll-thin"></pre>`;
+    row.addEventListener('click', () => {
+      const pre = row.querySelector('pre');
+      if (pre.classList.contains('hidden') && !pre.innerHTML) pre.innerHTML = jsonHTML(msg);
+      pre.classList.toggle('hidden');
+    });
+    term.appendChild(row);
+    while (term.children.length > 400) term.removeChild(term.firstChild);
+    if (atBottom || replay) term.scrollTop = term.scrollHeight;
+  }
+
+  // ═════════════════════ Ledger ═════════════════════
+  function renderLedger(snap) {
+    const L = snap.ledger;
+    $('#chainOk').innerHTML = L.chain_valid ? `<span class="text-ok">● chain valid</span> <span class="text-slate-500">· ${fmt(L.length)} blocks</span>` : '<span class="text-crit">● CHAIN BROKEN</span>';
+    $('#ledger').innerHTML = L.entries.map((e, i) => {
+      const cert = e.kind === 'PROOF_CERTIFICATE';
+      return `<div class="relative pl-6 ${i === 0 ? 'rise' : ''}">
+        <div class="absolute left-[9px] top-0 h-full w-px ${i === L.entries.length - 1 ? 'h-3' : ''} bg-white/10"></div>
+        <div class="absolute left-[5px] top-3 h-[9px] w-[9px] rounded-full ${cert ? 'bg-ok shadow-[0_0_8px_#2dd4bf]' : 'bg-crit shadow-[0_0_8px_#f43f5e]'}"></div>
+        <div class="mb-1.5 rounded-lg border ${cert ? 'border-ok/15 bg-ok/[.03]' : 'border-crit/20 bg-crit/[.05]'} px-2.5 py-1.5">
+          <div class="flex items-center gap-2 mono text-[10.5px]"><span class="text-slate-500">#${e.seq}</span>
+            <span class="${cert ? 'text-ok' : 'text-crit'}">${cert ? 'CERT' : 'CEX'}</span><span class="text-slate-500">${e.cycle_id} · A${e.attempt}</span>
+            <span class="ml-auto text-slate-600">${e.issued_at.slice(11, 19)}</span></div>
+          <div class="hash text-[10.5px] text-slate-300">${e.hash.slice(0, 40)}…</div>
+          <div class="hash text-[10px] text-slate-600">↳ ${e.prev_hash.slice(0, 40)}…</div></div></div>`;
+    }).join('');
+  }
+
+  // ═════════════════════ Toasts ═════════════════════
+  function toast(kind, title, body) {
+    const tone = { ok: 'border-ok/40 text-ok', crit: 'border-crit/50 text-crit', warn: 'border-warn/40 text-warn', info: 'border-gemma/40 text-gemma' }[kind];
+    const t = document.createElement('div');
+    t.className = `rise rounded-xl border ${tone} bg-ink-900/95 p-3 shadow-2xl backdrop-blur`;
+    t.innerHTML = `<div class="flex items-center gap-2 text-[12.5px] font-semibold"><i data-lucide="${kind === 'ok' ? 'shield-check' : kind === 'crit' ? 'shield-alert' : kind === 'warn' ? 'triangle-alert' : 'sparkles'}" class="h-4 w-4"></i>${esc(title)}</div>
+      <div class="mt-1 text-[11.5px] leading-relaxed text-slate-300">${body}</div>`;
+    $('#toasts').prepend(t);
+    icons();
+    setTimeout(() => { t.style.transition = 'opacity .4s'; t.style.opacity = 0; setTimeout(() => t.remove(), 400); }, 5200);
+    while ($('#toasts').children.length > 4) $('#toasts').lastChild.remove();
+  }
+
+  // ═════════════════════ Wiring ═════════════════════
+  function onSnapshot(snap) {
+    const prev = S.snap;
+    S.snap = snap;
+    renderHeader(snap); renderKpis(snap); renderMap(snap); renderChart(snap); renderLedger(snap);
+    const lc = snap.last_cycle;
+    if (lc && lc.cycle_id !== S.lastCycleId) {
+      S.lastCycleId = lc.cycle_id;
+      renderDag(snap);
+      const first = lc.final.replans > 0 ? lc.attempts[0].verification.counterexample : null;
+      const toastKey = first ? [...new Set(first.violations.map((v) => v.family))].sort().join() : '';
+      if (prev && first && (toastKey !== S.toastKey || Date.now() - S.toastAt > 20000)) {
+        S.toastKey = toastKey; S.toastAt = Date.now();
+        toast('crit', `Gemma Verifier intercepted unsafe plan`,
+          `${first.violations.length} invariant${first.violations.length > 1 ? 's' : ''} violated (${[...new Set(first.violations.map((v) => v.family))].join(', ')}). ` +
+          `Re-planned → <b class="text-ok">certified on attempt ${lc.attempts.length}</b>${lc.carbon && lc.carbon.shed_mw ? ` with ${fmt(lc.carbon.shed_mw)} MW controlled demand response` : ''}.`);
+      }
+    }
+    chooseCycle(snap);
+    renderInspector();
+    icons();
+  }
+
+  function onAudit(audit) {
+    if (!S.shown) return;
+    for (const a of S.shown.attempts) {
+      const art = a.verification.certificate || a.verification.counterexample;
+      if (art && art.hash === audit.artifact_hash) { a.verification.gemma = audit; renderInspector(); }
+    }
+  }
+
+  let es = null, pollTimer = null;
+  function connect() {
+    if (es) es.close();
+    es = new EventSource('/api/stream');
+    es.onopen = () => { $('#liveDot').className = 'h-1.5 w-1.5 rounded-full bg-ok shadow-[0_0_8px_#2dd4bf] blink'; if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } };
+    es.onmessage = (ev) => {
+      const frame = JSON.parse(ev.data);
+      if (frame.type === 'cycle') onSnapshot(frame.data);
+      else if (frame.type === 'bus') appendTerm(frame.data, frame.replay);
+      else if (frame.type === 'audit') onAudit(frame.data);
+    };
+    es.onerror = () => {
+      $('#liveDot').className = 'h-1.5 w-1.5 rounded-full bg-crit blink';
+      if (!pollTimer) pollTimer = setInterval(async () => { try { onSnapshot(await (await fetch('/api/state')).json()); } catch (_) { /* retry */ } }, 3000);
+    };
+  }
+
+  async function post(url, body) {
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+    if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+    return r.json();
+  }
+
+  function bind() {
+    $$('.switch[data-fault]').forEach((sw) => sw.addEventListener('click', async () => {
+      const fault = sw.dataset.fault, active = sw.getAttribute('aria-checked') !== 'true';
+      sw.setAttribute('aria-checked', active); sw.closest('.ctl').classList.toggle('on', active);
+      try {
+        const res = await post('/api/inject-grid-fault', { fault, active });
+        if (!res.attempts || res.attempts === 1) toast(active ? 'warn' : 'ok', `${fault.replace('_', ' ')} ${active ? 'injected' : 'cleared'}`, `Dispatch certified on first attempt · ${res.cycle_id}`);
+      } catch (e) { toast('crit', 'Fault injection failed', esc(e.message)); }
+    }));
+    $('#btnClear').addEventListener('click', () => post('/api/inject-grid-fault', { fault: 'all_clear', active: false }).then(() => toast('ok', 'All contingencies cleared', 'Grid returning to nominal operation.')));
+    $('#btnEval').addEventListener('click', async () => {
+      const btn = $('#btnEval'); btn.disabled = true; btn.style.opacity = .7;
+      try {
+        const res = await post('/api/evaluate-load-shift', {});
+        S.frozen = false; S.shown = null; S.lastCycleId = null;
+        const gm = res.gemma_audits.filter(Boolean).pop();
+        toast(res.verdict === 'CERTIFIED' ? 'info' : 'crit', `Verified evaluation · ${res.verdict}`,
+          `${res.attempts} attempt(s) · ${res.counterexamples.length} counter-example(s)` + (res.proof_certificate ? `<div class="mt-1 hash text-[10.5px] text-teal-200">${res.proof_certificate.hash}</div>` : '') +
+          (gm ? `<div class="mt-1.5 text-violet-200/90">${esc(gm.text).slice(0, 220)}</div>` : ''));
+        S.snap && onSnapshot(await (await fetch('/api/state')).json());
+      } catch (e) { toast('crit', 'Evaluation failed', esc(e.message)); }
+      finally { btn.disabled = false; btn.style.opacity = 1; }
+    });
+    $('#btnPause').addEventListener('click', () => post('/api/scheduler', { running: !(S.snap && S.snap.scheduler_running) }).then(async () => onSnapshot(await (await fetch('/api/state')).json())));
+    $('#btnStep').addEventListener('click', () => post('/api/evaluate-load-shift', {}));
+    $('#btnReset').addEventListener('click', () => post('/api/reset').then(() => { $('#term').innerHTML = ''; toast('ok', 'Grid reset', 'Seeded state restored; ledger continues (append-only).'); }));
+    $('#btnFreeze').addEventListener('click', () => {
+      S.frozen = !S.frozen;
+      $('#btnFreeze').innerHTML = `<i data-lucide="${S.frozen ? 'lock' : 'unlock'}" class="h-3 w-3"></i><span>${S.frozen ? 'Frozen' : 'Live'}</span>`;
+      $('#btnFreeze').classList.toggle('text-warn', S.frozen);
+      if (!S.frozen && S.snap) { S.shown = null; chooseCycle(S.snap); renderInspector(); }
+      icons();
+    });
+    $('#btnTermPause').addEventListener('click', () => { S.termPaused = !S.termPaused; $('#btnTermPause').textContent = S.termPaused ? 'resume' : 'pause'; });
+    $('#tabs').addEventListener('click', (e) => { const t = e.target.closest('.tab'); if (t) { S.tab = t.dataset.tab; renderInspector(); } });
+    $('#attemptChips').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-attempt]'); if (!b) return;
+      S.attempt = +b.dataset.attempt; S.holdUntil = Date.now() + 15000; renderInspector();
+    });
+    $$('[data-copy]').forEach((b) => b.addEventListener('click', () => navigator.clipboard && navigator.clipboard.writeText($('#' + b.dataset.copy).textContent).then(() => toast('info', 'Copied', 'SHA-256 hash copied to clipboard.'))));
+    setInterval(() => { $('#clock').textContent = new Date().toISOString().slice(11, 19); }, 1000);
+  }
+
+  buildMap(); buildChart(); buildFilters(); bind(); icons(); connect();
+})();
+</script>
+{% endraw %}
+</body>
+</html>
