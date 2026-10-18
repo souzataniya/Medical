@@ -163,7 +163,8 @@ class CarbonAnalysisAgent:
             critical_coverage=round(crit_srv / crit_dem, 4) if crit_dem else 1.0,
             shed_kw={ld.id: round(forecast.demand_kw[ld.id] - served[ld.id], 1) for ld in LOADS
                      if forecast.demand_kw[ld.id] - served[ld.id] > 0.05},
-            renewable_share=round(renew_used / tot_served, 4) if tot_served else 0.0,
+            # share of energy supplied this interval; battery charging is a sink, not a supply
+            renewable_share=round(renew_used / supply, 4) if (supply := renew_used + diesel + sum(max(v, 0.0) for v in bat.values())) else 0.0,
             renewable_curtailed_kw=round(max(forecast.renewable_available_kw - renew_used, 0.0), 1),
             diesel_kw=round(diesel, 1), battery_kw=round(sum(bat.values()), 1),
         )

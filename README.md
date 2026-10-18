@@ -17,7 +17,7 @@
 
 | 🌐 Live prototype | 🎬 Demo video (3 min) | 📑 Proposal deck (PDF) | 🏷️ Category |
 |:---:|:---:|:---:|:---:|
-| _TODO: Cloud Run URL_ | _TODO: YouTube / Vimeo / Drive link_ | [PDF](SynapseGrid-Proposal.pdf) · [PPTX](SynapseGrid-Proposal.pptx) | **Sustainability** |
+| _TODO: Cloud Run URL_ | [MP4 in repo](docs/video/SynapseGrid-Demo.mp4) · _TODO: public YouTube / Drive link_ | [PDF](SynapseGrid-Proposal.pdf) · [PPTX](SynapseGrid-Proposal.pptx) | **Sustainability** |
 
 <p align="center">
   <img src="docs/images/demo.gif" alt="Demo: normal operation, sudden solar loss, unsafe plan rejected, safe plan certified, replay, honest failure" width="100%">
@@ -135,7 +135,7 @@ sequenceDiagram
 | Operating cost ($/h) | 1 | 873 | **86** |
 | Critical loads served | 100 % | 100 % | **100 %** |
 | Unmet demand (kW) | 0 | 0 | **0** |
-| Renewable share | 96 % | 35 % | 35 % |
+| Renewable share | 96 % | 28 % | 35 % |
 
 Compared with the plan it rejected, the certified plan avoids **≈ 1,750 kg CO₂ per hour** of the incident and costs **≈ $790/h less**, without cutting power to any load.
 
@@ -357,5 +357,5 @@ gcloud run services describe synapsegrid --region asia-southeast1 --format='valu
 | Problem, community benefit, feasibility, scalability | ✅ Sections 1, 4, 6, 7 of this README |
 | Functional prototype using Google AI tools | ✅ Gemma + OR-Tools, runs locally (see section 10) |
 | Deployed on Cloud Run / GCP / Firebase | ⬜ `cloudbuild.yaml` ready (section 11); URL to be added after deploying |
-| Public 3-minute demo video | ⬜ To be recorded; link to be added |
+| Public 3-minute demo video | ⬜ Recorded ([`docs/video/SynapseGrid-Demo.mp4`](docs/video/SynapseGrid-Demo.mp4), 2:59); upload publicly and add the link |
 | Proposal deck (PDF) | ✅ [SynapseGrid-Proposal.pdf](SynapseGrid-Proposal.pdf) (editable [PPTX](SynapseGrid-Proposal.pptx)) |

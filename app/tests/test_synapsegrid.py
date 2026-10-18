@@ -324,3 +324,12 @@ def test_gemma_falls_back_to_second_model_after_server_errors(monkeypatch):
     assert out["outcome"]["status"] == "inference"
     assert out["outcome"]["model"] == "gemma-backup"
     assert sum("HTTP 500" in e for e in out["outcome"]["errors"]) == 2
+
+
+def test_renewable_share_never_exceeds_100_percent_when_charging():
+    g = SynapseGrid()
+    fc = ForecastingAgent().run(SCENARIO_BASELINE)
+    prop = {"generation_kw": {"PV-HILL": 2400.0, "WT-RIDGE": 400.0, "DG-HARB": 0.0},
+            "battery_kw": {"BESS-CLN": -400.0, "BESS-PRT": 0.0},
+            "served_kw": {k: v for k, v in SCENARIO_BASELINE.demand_kw.items()}}
+    assert g.carbon.run(prop, fc).renewable_share == 1.0

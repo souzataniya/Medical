@@ -541,7 +541,9 @@
       h += `<div class="flex flex-wrap items-center gap-2"><span class="rounded px-2 py-0.5 mono text-[10.5px] ${tone[o.status]}">${o.status.toUpperCase().replace('_', ' ')}</span>
         <span class="mono text-[10.5px] text-slate-500">${esc(o.model || 'no model')}${o.latency_ms ? ' · ' + fmt(o.latency_ms) + ' ms' : ''} · prompt ${esc(o.prompt_version)}</span></div>`;
       if (o.priorities) h += `<div class="mt-1.5 text-[12px] text-slate-200">${esc(o.priorities.incident_summary)}</div><div class="mt-1 text-[11px] text-slate-400">${esc(o.priorities.rationale)}</div>`;
-      if (o.errors && o.errors.length) h += `<div class="mt-1 mono text-[10.5px] text-rose-300/90">${o.errors.slice(0, 3).map(esc).join('<br>')}</div>`;
+      if (o.errors && o.errors.length) h += o.status === 'inference'
+        ? `<div class="mt-1 mono text-[10.5px] text-slate-500" title="${esc(o.errors.join(' | '))}">${o.errors.length} transient error(s) from the Gemma endpoint were retried before this answer</div>`
+        : `<div class="mt-1 mono text-[10.5px] text-rose-300/90">${o.errors.slice(0, 3).map(esc).join('<br>')}</div>`;
       if (o.raw_text) h += `<details class="mt-1"><summary class="cursor-pointer text-[10.5px] text-slate-500">raw model output (untrusted)</summary><pre class="mt-1 max-h-32 overflow-auto rounded bg-black/40 p-2 text-[10.5px] text-slate-400">${esc(o.raw_text)}</pre></details>`;
     }
     h += `<div class="mt-2 rounded-lg border border-white/[.06] bg-black/20 p-2"><div class="mono text-[10px] uppercase tracking-widest text-slate-500">Applied to optimizer · ${esc(p.source)}</div>
