@@ -601,7 +601,8 @@
     S.snap = s;
     renderHeader(s); renderKpis(s); renderMap(s); renderLedger(s); renderGemma(s);
     const lc = s.last_cycle;
-    if (lc && lc.cycle_id !== S.lastCycle) { S.lastCycle = lc.cycle_id; S.brief = null; renderRecovery(s); renderTrace(s); }
+    const key = lc ? `${lc.cycle_id}|${s.last_scenario ? s.last_scenario.incident_cycle : ''}` : null;
+    if (lc && key !== S.lastCycle) { if (!S.lastCycle || !S.lastCycle.startsWith(lc.cycle_id)) S.brief = null; S.lastCycle = key; renderRecovery(s); renderTrace(s); }
     chooseCycle(s); renderInspector(); icons();
   }
   let es = null, poll = null;
