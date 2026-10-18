@@ -285,3 +285,23 @@ def test_api_health_schema_and_flow():
         ev = client.post("/api/evaluation", json={"n": 20, "seed": 1}).json()
         assert ev["recovery"]["unsafe_accepted"] == 0
         assert not math.isnan(ev["rejection_accuracy"]["accuracy"])
+
+
+def test_gemma_thinking_parts_ignored_and_unsupported_setting_retried(monkeypatch):
+    answer = ('{"incident_summary": "Shelter open", "protected_loads": ["LD-SCHOOL"], '
+              '"load_priority": {"LD-MARKET": 1}, "rationale": "Protect shelter."}')
+    calls = []
+
+    def handler(request):
+        body = json.loads(request.content)
+        calls.append(body["generationConfig"])
+        if "thinkingConfig" in body["generationConfig"] and len(calls) == 1:
+            return httpx.Response(400, json={"error": {"message": "Thinking level is not supported for this model."}})
+        return httpx.Response(200, json={"candidates": [{"content": {"parts": [
+            {"text": "Reasoning about the shelter ...", "thought": True}, {"text": answer}]}}]})
+
+    g = SynapseGrid(gemma=gemma_with(monkeypatch, handler))
+    out = run(g.interpret_note("cyclone shelter open"))
+    assert out["outcome"]["status"] == "inference"
+    assert "Reasoning" not in out["outcome"]["raw_text"]
+    assert "thinkingConfig" not in calls[-1] and calls[0]["responseMimeType"] == "application/json"

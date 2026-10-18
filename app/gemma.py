@@ -17,8 +17,9 @@ Honesty rules enforced here:
 Configuration (environment):
   GEMMA_API_KEY (or GOOGLE_API_KEY)  → Google AI Studio / Gemini API hosting Gemma
   GEMMA_BASE_URL (+ GEMMA_API_KEY)   → any OpenAI-compatible server running Gemma (Ollama, vLLM, Cloud Run GPU)
-  GEMMA_MODEL                        → default gemma-3-27b-it (AI Studio) / gemma3:4b (OpenAI-compatible)
-  GEMMA_TIMEOUT_S                    → default 12
+  GEMMA_MODEL                        → default gemma-4-26b-a4b-it (AI Studio) / gemma3:4b (OpenAI-compatible)
+  GEMMA_THINKING_LEVEL               → default MINIMAL (AI Studio thinking models)
+  GEMMA_TIMEOUT_S                    → default 20
 """
 
 from __future__ import annotations
@@ -124,10 +125,13 @@ class GemmaClient:
             self.model = os.getenv("GEMMA_MODEL", "gemma3:4b")
         elif self.api_key:
             self.provider = "google-ai-studio"
-            self.model = os.getenv("GEMMA_MODEL", "gemma-3-27b-it")
+            self.model = os.getenv("GEMMA_MODEL", "gemma-4-26b-a4b-it")
         else:
             self.provider, self.model = "none", None
-        self.timeout_s = float(os.getenv("GEMMA_TIMEOUT_S", "12"))
+        self.timeout_s = float(os.getenv("GEMMA_TIMEOUT_S", "20"))
+        # Gemma 4 on AI Studio is a thinking model; keep thinking minimal so the answer fits the budget.
+        # Set GEMMA_THINKING_LEVEL="" to omit the setting (it is dropped automatically if a model rejects it).
+        self.thinking_level = os.getenv("GEMMA_THINKING_LEVEL", "MINIMAL")
         self._transport = transport
         self.stats = {"inference": 0, "rejected": 0, "unavailable": 0, "not_configured": 0}
         self.last: Optional[dict[str, Any]] = None
@@ -141,18 +145,28 @@ class GemmaClient:
         return {"provider": self.provider, "model": self.model, "configured": self.configured,
                 "timeout_s": self.timeout_s, "stats": dict(self.stats), "last": self.last}
 
-    async def _post(self, prompt: str, max_tokens: int) -> str:
+    async def _post(self, prompt: str, max_tokens: int, json_mode: bool = False) -> str:
         async with httpx.AsyncClient(timeout=self.timeout_s, transport=self._transport) as client:
             if self.provider == "google-ai-studio":
-                resp = await client.post(
-                    f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent",
-                    headers={"x-goog-api-key": self.api_key},
-                    json={"contents": [{"role": "user", "parts": [{"text": prompt}]}],
-                          "generationConfig": {"temperature": 0.1, "maxOutputTokens": max_tokens}},
-                )
+                config: dict[str, Any] = {"temperature": 0.1, "maxOutputTokens": max_tokens}
+                if json_mode:
+                    config["responseMimeType"] = "application/json"
+                if self.thinking_level:
+                    config["thinkingConfig"] = {"thinkingLevel": self.thinking_level}
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent"
+                headers = {"x-goog-api-key": self.api_key}
+                body = {"contents": [{"role": "user", "parts": [{"text": prompt}]}], "generationConfig": config}
+                resp = await client.post(url, headers=headers, json=body)
+                if resp.status_code == 400 and "thinking" in resp.text.lower() and "thinkingConfig" in config:
+                    config.pop("thinkingConfig")  # model doesn't support the setting: retry without it
+                    resp = await client.post(url, headers=headers, json=body)
                 resp.raise_for_status()
-                parts = resp.json()["candidates"][0]["content"]["parts"]
-                return "".join(p.get("text", "") for p in parts)
+                cand = resp.json()["candidates"][0]
+                # Thinking models return reasoning as parts flagged "thought": only the answer parts count.
+                text = "".join(p.get("text", "") for p in cand.get("content", {}).get("parts", []) if not p.get("thought"))
+                if not text.strip():
+                    raise RuntimeError(f"no answer text (finishReason={cand.get('finishReason')})")
+                return text
             headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
             resp = await client.post(f"{self.base_url}/chat/completions", headers=headers, json={
                 "model": self.model, "temperature": 0.1, "max_tokens": max_tokens,
@@ -160,13 +174,14 @@ class GemmaClient:
             resp.raise_for_status()
             return resp.json()["choices"][0]["message"]["content"]
 
-    async def _call(self, prompt: str, max_tokens: int) -> tuple[Optional[str], Optional[float], list[str]]:
+    async def _call(self, prompt: str, max_tokens: int,
+                    json_mode: bool = False) -> tuple[Optional[str], Optional[float], list[str]]:
         """One retry on transient errors; bounded by GEMMA_TIMEOUT_S per attempt."""
         errors: list[str] = []
         for attempt in range(2):
             t0 = time.perf_counter()
             try:
-                text = await asyncio.wait_for(self._post(prompt, max_tokens), self.timeout_s)
+                text = await asyncio.wait_for(self._post(prompt, max_tokens, json_mode), self.timeout_s)
                 return text, round((time.perf_counter() - t0) * 1000, 1), errors
             except httpx.HTTPStatusError as exc:
                 errors.append(f"HTTP {exc.response.status_code}: {exc.response.text[:200]}")
@@ -192,7 +207,7 @@ class GemmaClient:
         if not self.configured:
             return self._finish(GemmaOutcome(status="not_configured", errors=[
                 "No Gemma endpoint configured: set GEMMA_API_KEY (Google AI Studio) or GEMMA_BASE_URL."], **base))
-        text, latency, errors = await self._call(prompt, 400)
+        text, latency, errors = await self._call(prompt, 1024, json_mode=True)
         if text is None:
             return self._finish(GemmaOutcome(status="unavailable", errors=errors, **base))
         try:
@@ -208,14 +223,16 @@ class GemmaClient:
         prompt = (
             "You write short briefings for the operator of a simulated island microgrid. Using ONLY the facts below "
             "(do not invent numbers), write at most 110 words: what happened, why the verifier rejected the unsafe "
-            "plan (cite the constraint ids and kW values), and what the certified recovery plan changed.\n\n"
+            "plan (cite the constraint ids and kW values), and what the certified recovery plan changed. Write shares "
+            "as percentages. Only say a value increased or decreased if both the before and after values are in the facts, "
+            "and check the direction. Round kW to whole numbers.\n\n"
             f"FACTS (JSON): {json.dumps(facts, sort_keys=True, default=str)}"
         )
         base = dict(task="briefing", provider=self.provider, model=self.model, input_digest=sha256_hex(prompt))
         if not self.configured:
             return self._finish(GemmaOutcome(status="not_configured", errors=[
                 "No Gemma endpoint configured: set GEMMA_API_KEY (Google AI Studio) or GEMMA_BASE_URL."], **base))
-        text, latency, errors = await self._call(prompt, 300)
+        text, latency, errors = await self._call(prompt, 1024)
         if text is None or not text.strip():
             return self._finish(GemmaOutcome(status="unavailable", errors=errors or ["empty response"], **base))
         return self._finish(GemmaOutcome(status="inference", latency_ms=latency, text=text.strip()[:2000],

@@ -16,6 +16,7 @@ DAG for one dispatch cycle
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 import uuid
 from collections import OrderedDict, deque
@@ -549,7 +550,7 @@ class SynapseGrid:
                  "status": cyc.get("status"), "reason": cyc.get("reason"),
                  "violations": [v["message"] for a in cyc.get("attempts", []) if a.get("verification")
                                 for v in a["verification"]["violations"]][:6]}
-        out = await self.gemma.briefing(facts)
+        out = await self.gemma.briefing(json.loads(json.dumps(facts, default=str), parse_float=lambda x: round(float(x), 3)))
         self.bus.publish("gemma.briefing", f"Gemma briefing: {out.status}", out.model_dump())
         return out.model_dump()
 

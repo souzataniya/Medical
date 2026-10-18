@@ -188,7 +188,7 @@ In the stress test (night, no wind, nearly empty batteries, diesel trip), **no p
 |---|---|
 | **Runs today** | The full prototype runs on a laptop or a single 1-vCPU Cloud Run instance. The optimizer solves in ≈ 0.2 ms and the checker runs in ≈ 0.1 ms for this network. |
 | **Small, open stack** | FastAPI · Pydantic · httpx · Jinja2 · Google OR-Tools, all pinned in [`app/requirements.txt`](app/requirements.txt). |
-| **Tested** | 35 automated tests: valid plans, line overloads, battery limits and depletion, solar loss with recovery, honest failure, malformed and adversarial inputs, Gemma timeouts and invalid output, reproducibility, and API validation. |
+| **Tested** | 36 automated tests: valid plans, line overloads, battery limits and depletion, solar loss with recovery, honest failure, malformed and adversarial inputs, Gemma timeouts and invalid output, reproducibility, and API validation. |
 | **Safe without the AI** | If Gemma is missing, slow, or returns invalid output, the app says so and falls back to declared defaults. Safety never depends on the model. |
 
 ## 7. 📈 Scalability
@@ -249,7 +249,7 @@ In the stress test (night, no wind, nearly empty batteries, diesel trip), **no p
 cd app
 python3.12 -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
-pytest -q                              # 35 tests
+pytest -q                              # 36 tests
 python evaluation.py --n 300 --seed 7  # randomized evidence
 python main.py                         # → http://localhost:8080   (API docs: /docs)
 ```
@@ -261,7 +261,7 @@ Then click **"Run incident: solar loss → unsafe plan → recovery"**.
 
 | Option | Environment |
 |---|---|
-| Google AI Studio | `GEMMA_API_KEY=<your key>` (default model `gemma-3-27b-it`; override with `GEMMA_MODEL`) |
+| Google AI Studio | `GEMMA_API_KEY=<your key>` (default model `gemma-4-26b-a4b-it`; override with `GEMMA_MODEL` if your key lists a different Gemma model) |
 | Local Ollama | `GEMMA_BASE_URL=http://localhost:11434/v1  GEMMA_MODEL=gemma3:4b` |
 | Self-hosted (vLLM, Cloud Run GPU) | `GEMMA_BASE_URL=https://<endpoint>/v1  GEMMA_MODEL=<name>` |
 
@@ -290,7 +290,7 @@ The technical deep dive (optimization formulation, full constraint list, audit-r
 ## 11. ☁️ Google Cloud deployment
 
 ```text
- git push ──▶ GitHub Actions CI ── pytest (35 tests) · 300-scenario evaluation · docker build + /health smoke test
+ git push ──▶ GitHub Actions CI ── pytest (36 tests) · 300-scenario evaluation · docker build + /health smoke test
  gcloud builds submit ──▶ Cloud Build (cloudbuild.yaml)
                            ├─ test      python:3.12 · pytest
                            ├─ build     docker build app/
@@ -343,7 +343,7 @@ gcloud run services describe synapsegrid --region asia-southeast1 --format='valu
 - **Simulation only.** The data is synthetic and the network illustrative; there is no real-grid integration.
 - **Simplified physics.** Lossless DC power flow over a single 15-minute interval. No voltage, reactive power, protection or stability modelling, and no multi-hour look-ahead.
 - **Assumed numbers.** Emission factors and costs are assumptions, stated in [`app/grid.py`](app/grid.py).
-- **Gemma untested live.** Gemma has been tested only against mocked responses so far. A live run needs an API key or endpoint.
+- **Gemma is the slow step.** In a live check (18 Oct 2026, `gemma-4-26b-a4b-it` via Google AI Studio), interpreting a note took ≈ 6 s and a briefing ≈ 4–6 s, versus under 1 ms for planning and verification. The automated tests use mocked responses.
 - **Not yet deployed.** The Cloud Run deployment hasn't been run. CI builds and smoke-tests the Docker image.
 - **Not a formal proof.** "Certified" means every modeled constraint holds under the stated assumptions.
 
