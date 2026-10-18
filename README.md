@@ -17,7 +17,7 @@
 
 | 🌐 Live prototype | 🎬 Demo video (3 min) | 📑 Proposal deck (PDF) | 🏷️ Category |
 |:---:|:---:|:---:|:---:|
-| _TODO: Cloud Run URL_ | _TODO: YouTube / Vimeo / Drive link_ | _TODO: link_ | **Sustainability** |
+| _TODO: Cloud Run URL_ | _TODO: YouTube / Vimeo / Drive link_ | [PDF](SynapseGrid-Proposal.pdf) · [PPTX](SynapseGrid-Proposal.pptx) | **Sustainability** |
 
 <p align="center">
   <img src="docs/images/demo.gif" alt="Demo: normal operation, sudden solar loss, unsafe plan rejected, safe plan certified, replay, honest failure" width="100%">
@@ -327,4 +327,4 @@ The technical deep dive (optimization formulation, full constraint list, audit-r
 | Functional prototype using Google AI tools | ✅ Gemma + OR-Tools, runs locally (see section 10) |
 | Deployed on Cloud Run / GCP / Firebase | ⬜ Deploy command ready; URL to be added |
 | Public 3-minute demo video | ⬜ To be recorded; link to be added |
-| Proposal deck (PDF) | ⬜ To be created; link to be added |
+| Proposal deck (PDF) | ✅ [SynapseGrid-Proposal.pdf](SynapseGrid-Proposal.pdf) (editable [PPTX](SynapseGrid-Proposal.pptx)) |
