@@ -17,7 +17,7 @@
 
 | 🌐 Live prototype | 🎬 Demo video (3 min) | 📑 Proposal deck (PDF) | 🏷️ Category |
 |:---:|:---:|:---:|:---:|
-| _TODO: Cloud Run URL_ | [▶ Watch on Loom](https://www.loom.com/share/5062c49df951400abe2b761341c9c24a) · [MP4](docs/video/SynapseGrid-Demo.mp4) | [PDF](SynapseGrid-Proposal.pdf) · [PPTX](SynapseGrid-Proposal.pptx) | **Sustainability** |
+| https://synapsegrid-608544134195.asia-south1.run.app/ | [▶ Watch on Loom](https://www.loom.com/share/5062c49df951400abe2b761341c9c24a) · [MP4](docs/video/SynapseGrid-Demo.mp4) | [PDF](SynapseGrid-Proposal.pdf) · [PPTX](SynapseGrid-Proposal.pptx) | **Sustainability** |
 
 <p align="center">
   <img src="docs/images/demo.gif" alt="Demo: normal operation, sudden solar loss, unsafe plan rejected, safe plan certified, replay, honest failure" width="100%">
